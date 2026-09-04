@@ -19,6 +19,7 @@ import {
   Crown,
   Mail,
   Award,
+  Sparkles,
 } from 'lucide-react';
 
 export const AdminNav: React.FC = () => {
@@ -47,23 +48,23 @@ export const AdminNav: React.FC = () => {
   ];
 
   return (
-    <div className="border-b border-[#b91c1c]/30 bg-[#050608]/90 backdrop-blur-md sticky top-16 z-30 mb-8">
+    <div className="border-y border-[#dc2626]/40 bg-[#07090d]/95 backdrop-blur-2xl sticky top-[68px] z-40 mb-8 shadow-[0_10px_35px_rgba(0,0,0,0.9)]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between gap-4 overflow-x-auto py-2.5 no-scrollbar">
-          <div className="flex items-center gap-1 sm:gap-2">
+        <div className="flex items-center justify-between gap-4 py-3 overflow-x-auto no-scrollbar">
+          <div className="flex items-center gap-2 shrink-0">
             {links.map((link) => {
               const isActive = location.pathname === link.path;
               return (
                 <Link
                   key={link.path}
                   to={link.path}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-mono font-bold whitespace-nowrap transition-all ${
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-mono font-bold whitespace-nowrap transition-all duration-300 ${
                     isActive
-                      ? 'bg-[#1a0000] text-white border border-[#b91c1c] shadow-[0_0_15px_rgba(185,28,28,0.3)]'
-                      : 'text-slate-400 hover:text-white hover:bg-white/5 border border-transparent'
+                      ? 'bg-gradient-to-r from-[#1a0000] via-[#0d0f14] to-[#07090d] text-white border border-[#ff2b2b] shadow-[0_0_20px_rgba(220,38,38,0.5)] scale-[1.02]'
+                      : 'text-slate-400 hover:text-white hover:bg-white/5 border border-white/5 hover:border-[#dc2626]/30'
                   }`}
                 >
-                  <span className={isActive ? 'text-[#b91c1c]' : 'text-slate-500'}>
+                  <span className={isActive ? 'text-[#ff2b2b] animate-pulse' : 'text-slate-400'}>
                     {link.icon}
                   </span>
                   {link.label}
@@ -74,9 +75,9 @@ export const AdminNav: React.FC = () => {
 
           <Link
             to="/admin/participants/new"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-mono font-bold text-white bg-[#b91c1c] hover:bg-[#991b1b] transition-colors whitespace-nowrap shrink-0 shadow-md shadow-[#b91c1c]/20"
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-mono font-bold text-white bg-gradient-to-r from-[#dc2626] to-[#b91c1c] hover:from-[#ff2b2b] hover:to-[#dc2626] transition-all whitespace-nowrap shrink-0 shadow-[0_0_20px_rgba(220,38,38,0.4)] border border-[#ff2b2b]/50 hover:scale-105"
           >
-            <PlusCircle className="w-3.5 h-3.5" /> Add Participant
+            <PlusCircle className="w-4 h-4 text-white animate-pulse" /> Add Participant
           </Link>
         </div>
       </div>
