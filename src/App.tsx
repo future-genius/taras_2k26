@@ -75,12 +75,15 @@ const PageLoader: React.FC = () => (
   </div>
 );
 
+import { ScrollToTop } from './components/common/ScrollToTop';
+
 // ─── App ─────────────────────────────────────────────────────────────────────
 export const App: React.FC = () => {
   return (
     <ErrorBoundary>
       <AuthProvider>
         <BrowserRouter>
+          <ScrollToTop />
           <Suspense fallback={<PageLoader />}>
             <Routes>
             <Route path="/" element={<Layout />}>
