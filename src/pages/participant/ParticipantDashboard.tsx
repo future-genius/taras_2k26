@@ -368,8 +368,8 @@ export const ParticipantDashboard: React.FC = () => {
             WELCOME BACK // {participantProfile.participantId}
           </div>
 
-          <h1 className="text-5xl sm:text-6xl md:text-7xl font-extrabold tracking-tight text-white drop-shadow-2xl mb-3">
-            <span className="bg-gradient-to-r from-white via-red-100 to-white bg-clip-text text-transparent">
+          <h1 className="text-5xl sm:text-6xl md:text-7xl font-extrabold tracking-tight mb-3">
+            <span className="bg-gradient-to-r from-[#ff2b2b] via-[#ff6666] to-[#dc2626] bg-clip-text text-transparent drop-shadow-[0_4px_30px_rgba(220,38,38,0.85)] filter">
               {participantProfile.fullName}
             </span>
           </h1>
