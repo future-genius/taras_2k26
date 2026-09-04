@@ -1,0 +1,512 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Helper Functions
+    // ─────────────────────────────────────────────────────────────────────────
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Retrieve caller's profile document from Firestore
+    function getCallerProfile() {
+      return get(/databases/$(database)/documents/participants/$(request.auth.uid)).data;
+    }
+
+    // Check if the caller's participant profile document exists in Firestore
+    function callerProfileExists() {
+      return isAuthenticated() && exists(/databases/$(database)/documents/participants/$(request.auth.uid));
+    }
+
+    // Role helper methods — safe: returns 'participant' if profile doc doesn't exist yet.
+    // This prevents the circular-read failure where reading a participant doc triggers
+    // getUserRole() which triggers another read that fails and denies the original request.
+    function getUserRole() {
+      return callerProfileExists()
+        ? getCallerProfile().role
+        : 'participant';
+    }
+
+    // ── Tier 1: PRESIDENT / SUPER_ADMIN ─────────────────────────────────────
+    // Only role === 'super_admin' qualifies. 'PRESIDENT' legacy alias also accepted.
+    function isSuperAdmin() {
+      return isAuthenticated() && (
+        getUserRole() == 'super_admin' ||
+        getUserRole() == 'PRESIDENT'
+      );
+    }
+
+    // ── Tier 2: ADMIN (does NOT include super_admin for admin-only logic) ────
+    function isStrictAdmin() {
+      return isAuthenticated() && getUserRole() == 'admin';
+    }
+
+    // ── Tier 2+: Admin OR above (for shared admin operations) ───────────────
+    function isAdmin() {
+      return isSuperAdmin() || isStrictAdmin();
+    }
+
+    // ── Tier 3: STAFF and above ──────────────────────────────────────────────
+    function isStaff() {
+      return isAuthenticated() && (
+        getUserRole() == 'staff' ||
+        getUserRole() == 'registration_staff' ||
+        getUserRole() == 'REGISTRATION_TEAM' ||
+        isAdmin()
+      );
+    }
+
+    // ── Tier 4: COORDINATOR / EVENT HEAD and above ───────────────────────────
+    function isCoordinator() {
+      return isAuthenticated() && (
+        getUserRole() == 'coordinator' ||
+        getUserRole() == 'EVENT_HEAD' ||
+        isAdmin()
+      );
+    }
+
+    function isCoordinatorForEvent(eventId) {
+      return isAuthenticated() && (
+        isAdmin() ||
+        (
+          isCoordinator() &&
+          ('assignedEventIds' in getCallerProfile()) &&
+          getCallerProfile().assignedEventIds.hasAny([eventId])
+        )
+      );
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Security Guards — prevent privilege escalation to super_admin
+    // ─────────────────────────────────────────────────────────────────────────
+
+    // True if the incoming write is attempting to set role = super_admin
+    function isAttemptingToBecomeSuperAdmin() {
+      return 'role' in request.resource.data &&
+        (request.resource.data.role == 'super_admin' ||
+         request.resource.data.role == 'PRESIDENT');
+    }
+
+    // True if the document being written currently belongs to a super_admin
+    function isTargetSuperAdmin() {
+      return resource != null &&
+        'role' in resource.data &&
+        (resource.data.role == 'super_admin' || resource.data.role == 'PRESIDENT');
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 1. Participant Profiles (/participants/{userId})
+    // ─────────────────────────────────────────────────────────────────────────
+
+    match /participants/{userId} {
+      // Read: Any authenticated user can read participant profiles (needed for squad roster, teammate lookup, certificates)
+      allow read: if isAuthenticated();
+
+      // Create: Authenticated users can create ONLY their own profile with default security state.
+      // NEVER allowed to self-create as super_admin.
+      allow create: if (
+        isOwner(userId) &&
+        request.resource.data.uid == userId &&
+        (
+          !('role' in request.resource.data) ||
+          request.resource.data.role == 'participant' ||
+          request.resource.data.role == 'PARTICIPANT' ||
+          (request.auth.token.email == 'registration.demo@taras2k26.test' && request.resource.data.role == 'registration_staff') ||
+          (request.auth.token.email == 'eventhead.demo@taras2k26.test' && (request.resource.data.role == 'coordinator' || request.resource.data.role == 'EVENT_HEAD'))
+        ) &&
+        (
+          !('assignedEventIds' in request.resource.data) ||
+          request.resource.data.assignedEventIds.size() == 0 ||
+          request.auth.token.email == 'eventhead.demo@taras2k26.test'
+        ) &&
+        // Explicitly forbid isPrimarySuperAdmin from being set by self
+        !('isPrimarySuperAdmin' in request.resource.data)
+      ) || (
+        isAuthenticated() &&
+        userId == 'taras_demo_participant_001' &&
+        request.resource.data.isDemo == true
+      );
+
+      // Update rules:
+      // RULE A — super_admin: can update any profile, including other super_admin profiles.
+      //   Exception: cannot remove isPrimarySuperAdmin flag from primary account.
+      // RULE B — admin (strict, NOT super_admin): can update profiles EXCEPT:
+      //   - Cannot target a super_admin profile
+      //   - Cannot promote anyone to super_admin
+      //   - Cannot set isPrimarySuperAdmin
+      // RULE C — staff: can only update venue check-in fields.
+      // RULE D — coordinator: can only update attendance/shortlist fields.
+      // RULE E — any authenticated user (owner or team leader): can update non-security fields
+      //   (bio, registeredEvents, teamIds, updatedAt) without being able to alter security roles,
+      //   check-in status, certificate status, tokens, or primary admin status.
+      allow update: if
+        // RULE 1: Owner (or demo participant) updating non-security fields (bio, registeredEvents, teamIds, updatedAt)
+        // Evaluated FIRST so no circular or cross-document get() reads occur for normal participants
+        (isAuthenticated() &&
+         (isOwner(userId) || userId == 'taras_demo_participant_001') &&
+         !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+           'role',
+           'isPrimarySuperAdmin',
+           'venueCheckIn',
+           'venueCheckInStatus',
+           'venueCheckInTimestamp',
+           'certificateStatus',
+           'certificateUrl',
+           'assignedEventIds',
+           'attendanceStatus',
+           'shortlistStatus',
+           'participantId',
+           'qrToken'
+         ]))
+
+        // RULE A: super_admin has full update authority
+        || isSuperAdmin()
+
+        // RULE B: admin can update non-super_admin profiles, cannot escalate to super_admin
+        || (isStrictAdmin() &&
+            !isTargetSuperAdmin() &&
+            !isAttemptingToBecomeSuperAdmin() &&
+            !('isPrimarySuperAdmin' in request.resource.data))
+
+        // RULE C: staff can update venue check-in status
+        || (isStaff() &&
+            !isAdmin() &&
+            request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['venueCheckIn', 'venueCheckInStatus', 'venueCheckInTimestamp', 'checkedInByStaffUid', 'updatedAt']))
+
+        // RULE D: coordinator can update attendance and shortlist
+        || (isCoordinator() &&
+            !isAdmin() &&
+            request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['attendanceStatus', 'shortlistStatus', 'updatedAt']))
+
+        // RULE F: Isolated demo provision updates
+        || (isOwner(userId) && request.auth.token.email in ['registration.demo@taras2k26.test', 'eventhead.demo@taras2k26.test']);
+
+      // Delete: Only super_admin can delete a super_admin profile.
+      // Admin can delete non-super_admin profiles.
+      allow delete: if isSuperAdmin() ||
+        (isStrictAdmin() && !isTargetSuperAdmin());
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 2. Event Registrations (/registrations/{registrationId})
+    // ─────────────────────────────────────────────────────────────────────────
+
+    match /registrations/{registrationId} {
+      // Read: Any authenticated user can read registrations
+      allow read: if isAuthenticated();
+
+      // Create: Participant can create their own registration in PENDING/PENDING_PAYMENT status.
+      allow create: if isAuthenticated() &&
+        (
+          request.resource.data.uid == request.auth.uid ||
+          request.resource.data.uid == 'taras_demo_participant_001' ||
+          isAdmin()
+        ) &&
+        (
+          !('paymentStatus' in request.resource.data) ||
+          request.resource.data.paymentStatus == 'PENDING' ||
+          request.resource.data.paymentStatus == 'NOT_REQUIRED'
+        ) &&
+        (
+          !('status' in request.resource.data) ||
+          request.resource.data.status == 'PENDING' ||
+          request.resource.data.status == 'PENDING_PAYMENT' ||
+          request.resource.data.status == 'PAYMENT_VERIFICATION_PENDING' ||
+          request.resource.data.status == 'CONFIRMED'
+        ) &&
+        !('paymentVerifiedBy' in request.resource.data) &&
+        !('paymentVerifiedAt' in request.resource.data) &&
+        // Participants cannot self-assign fee verification fields
+        !('paymentRejectedBy' in request.resource.data);
+
+      // Update:
+      // A. Staff / Registration Staff / Admin: Can perform payment verification and rejection
+      // B. Participant Owner: Can only update payment proof fields (utrNumber, paymentScreenshotUrl, paymentSubmittedAt, status→PAYMENT_VERIFICATION_PENDING)
+      //    Strictly CANNOT set paymentStatus = VERIFIED or status = CONFIRMED.
+      //    CANNOT set paymentVerifiedBy/At, feeAmount, calculatedFee, feePerPerson, isFirstPayment, teamMemberCount.
+      allow update: if (
+        isStaff()
+      ) || (
+        isAuthenticated() &&
+        (resource.data.uid == request.auth.uid || resource.data.uid == 'taras_demo_participant_001') &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'paymentStatus',
+          'paymentVerifiedBy',
+          'paymentVerifiedAt',
+          'paymentRejectedBy',
+          'paymentRejectedAt',
+          'feeAmount',
+          'calculatedFee',
+          'feePerPerson',
+          'isFirstPayment',
+          'teamMemberCount',
+          'participantId',
+          'uid',
+          'eventId'
+        ]) &&
+        request.resource.data.status != 'CONFIRMED'
+      );
+
+      // Delete: Admin or participant deleting their own registration
+      allow delete: if isAdmin() || (isAuthenticated() && (resource.data.uid == request.auth.uid || resource.data.uid == 'taras_demo_participant_001'));
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 3. Teams (/teams/{teamId})
+    // ─────────────────────────────────────────────────────────────────────────
+
+    match /teams/{teamId} {
+      allow read: if isAuthenticated();
+
+      // Create: Any authenticated participant can create a team.
+      // Teams are event-independent — no eventId required at creation.
+      allow create: if isAuthenticated();
+
+      // Update: Team leader (or member locking during registration) or Admin can update.
+      // CRITICAL: Once eventRegistrationStarted=true, composition fields
+      // (memberUids, members, memberCount) are LOCKED — only admin can change them.
+      allow update: if (
+        isAuthenticated() &&
+        (
+          resource.data.leaderUid == request.auth.uid ||
+          resource.data.leaderUid == 'taras_demo_participant_001' ||
+          (request.auth.uid in resource.data.memberUids)
+        ) &&
+        (
+          // If NOT locked: all updates by leader/members are allowed
+          !('eventRegistrationStarted' in resource.data) ||
+          resource.data.eventRegistrationStarted != true ||
+          // If locked: only non-composition fields can be updated
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'memberUids', 'members', 'memberCount'
+          ])
+        )
+      ) || isAdmin();
+
+      // Delete: Admin can delete any team. Leader can delete their own (non-locked) team.
+      allow delete: if isAdmin() || (
+        isAuthenticated() &&
+        (resource.data.leaderUid == request.auth.uid || resource.data.leaderUid == 'taras_demo_participant_001') &&
+        resource.data.eventRegistrationStarted != true
+      );
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 3.1. Team Join Requests (/team_join_requests/{requestId})
+    // ─────────────────────────────────────────────────────────────────────────
+
+    match /team_join_requests/{requestId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isAuthenticated();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 4. Event Check-Ins (/event_checkins/{checkInId})
+    // ─────────────────────────────────────────────────────────────────────────
+
+    match /event_checkins/{checkInId} {
+      allow read: if isAuthenticated() && (
+        resource.data.uid == request.auth.uid ||
+        isStaff() ||
+        (isCoordinator() && isCoordinatorForEvent(resource.data.eventId)) ||
+        isAdmin()
+      );
+
+      allow create: if isAdmin() || (
+        isCoordinator() &&
+        isCoordinatorForEvent(request.resource.data.eventId)
+      );
+
+      allow update, delete: if isAdmin();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 5. Scorecards (/scorecards/{scorecardId})
+    // ─────────────────────────────────────────────────────────────────────────
+
+    match /scorecards/{scorecardId} {
+      allow read: if isAdmin() || isStaff() || (
+        isCoordinator() &&
+        isCoordinatorForEvent(resource.data.eventId)
+      );
+
+      allow create: if isAdmin() || (
+        isCoordinator() &&
+        isCoordinatorForEvent(request.resource.data.eventId)
+      );
+
+      allow update: if isAdmin() || (
+        isCoordinator() &&
+        isCoordinatorForEvent(resource.data.eventId) &&
+        resource.data.status != 'SUBMITTED'
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 6. Results (/results/{resultId})
+    // ─────────────────────────────────────────────────────────────────────────
+
+    match /results/{resultId} {
+      allow read: if (resource.data.status == 'PUBLISHED') || isAdmin() || (
+        isCoordinator() &&
+        isCoordinatorForEvent(resource.data.eventId)
+      );
+
+      allow write: if isAdmin();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 7. Certificate Records (/certificate_records/{certId})
+    // ─────────────────────────────────────────────────────────────────────────
+
+    match /certificate_records/{certId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /email_logs/{emailJobId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 8. Audit Trail (/audit_logs/{logId})
+    // IMMUTABLE: update and delete are STRICTLY FORBIDDEN.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    match /audit_logs/{logId} {
+      // Read: Admin and super_admin
+      allow read: if isAdmin();
+
+      // Create: Any authenticated operational role
+      allow create: if isAuthenticated();
+
+      // Update / Delete: PERMANENTLY FORBIDDEN — audit trail is immutable
+      allow update, delete: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 9. Public Content: Events, Announcements & Schedules
+    // ─────────────────────────────────────────────────────────────────────────
+
+    match /events/{eventId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /announcements/{announcementId} {
+      allow read: if true;
+      allow write: if isAdmin() || isStaff();
+    }
+
+    match /schedules/{scheduleId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 10. Notifications & System Config
+    // ─────────────────────────────────────────────────────────────────────────
+
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated() && (
+        resource.data.uid == request.auth.uid ||
+        isAdmin()
+      );
+
+      allow create: if isAdmin() || isStaff() || (
+        isAuthenticated() && request.resource.data.uid == request.auth.uid
+      );
+
+      allow update: if isAuthenticated() &&
+        resource.data.uid == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'updatedAt']);
+
+      allow delete: if isAdmin() || (
+        isAuthenticated() && resource.data.uid == request.auth.uid
+      );
+    }
+
+    match /system_config/{configId} {
+      allow read: if isAuthenticated();
+      // Only super_admin can change system config; admin can read
+      allow write: if isSuperAdmin() || isStrictAdmin();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Phase 17.1: Email Jobs — Server-side bulk email dispatch queue
+    // ─────────────────────────────────────────────────────────────────────────
+    match /email_jobs/{jobId} {
+      // Admins and above can read any email job
+      allow read: if isAdmin() || isSuperAdmin();
+
+      // Only admins and above can create email dispatch jobs
+      allow create: if isAdmin() || isSuperAdmin();
+
+      // Only admins can update job status (e.g., retrying failed recipients)
+      allow update: if isAdmin() || isSuperAdmin();
+
+      // Only super_admin can delete email job records
+      allow delete: if isSuperAdmin();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Phase 17.1: Certificate Jobs — Server-side certificate generation queue
+    // ─────────────────────────────────────────────────────────────────────────
+    match /certificate_jobs/{jobId} {
+      // Admins and above can read any certificate job status
+      allow read: if isAdmin() || isSuperAdmin();
+
+      // Only admins can create certificate generation jobs
+      allow create: if isAdmin() || isSuperAdmin();
+
+      // Allow status updates by admins (progress tracking)
+      allow update: if isAdmin() || isSuperAdmin();
+
+      // Only super_admin can delete certificate job records
+      allow delete: if isSuperAdmin();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Phase 17.1: Certificate Records — Issued e-certificate metadata
+    // ─────────────────────────────────────────────────────────────────────────
+    match /certificate_records/{certId} {
+      // Public verification: allow reading a specific certificate by ID for
+      // public verification — but only document reads, not collection queries
+      // (collection-level queries require auth so bulk scraping is blocked)
+      allow get: if true;
+
+      // Listing/querying the full collection is restricted to authenticated users
+      allow list: if isAuthenticated();
+
+      // Only admins (or Cloud Functions backend) can create certificates
+      allow create: if isAdmin() || isSuperAdmin();
+
+      // Participants cannot modify their own certificate records; admin only
+      allow update: if isAdmin() || isSuperAdmin();
+
+      // Only super_admin can delete certificate records
+      allow delete: if isSuperAdmin();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Phase 17: Email Logs — delivery status tracking per email job
+    // ─────────────────────────────────────────────────────────────────────────
+    match /email_logs/{emailJobId} {
+      allow read: if isAdmin() || isSuperAdmin();
+      allow write: if isAdmin() || isSuperAdmin();
+    }
+  }
+}

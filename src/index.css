@@ -1,0 +1,525 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-primary: #050608;
+  --bg-secondary: #0a0c10;
+  --bg-card: rgba(10, 12, 16, 0.85);
+  --bg-card-hover: rgba(18, 20, 28, 0.9);
+  --border-color: rgba(255, 255, 255, 0.06);
+  --border-glow: rgba(127, 29, 29, 0.4);
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  /* Strict dark reds — NO pink */
+  --accent-red: #991b1b;
+  --accent-red-bright: #dc2626;
+  --accent-red-crimson: #b91c1c;
+  --accent-red-dark: #7f1d1d;
+  --accent-red-deep: #3f0000;
+}
+
+.font-bebas {
+  font-family: 'Bebas Neue', 'Oswald', sans-serif;
+  letter-spacing: 0.05em;
+}
+
+.font-oswald {
+  font-family: 'Oswald', 'Inter', sans-serif;
+}
+
+.font-mono-tech {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+* {
+  border-color: var(--border-color);
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  color-scheme: dark;
+  background-color: #050608;
+  color: #f8fafc;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+body {
+  overflow-x: hidden;
+  min-height: 100vh;
+  background-color: var(--bg-primary);
+  background-image:
+    radial-gradient(circle at 15% 15%, rgba(127, 29, 29, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 85% 85%, rgba(99, 20, 20, 0.08) 0%, transparent 50%),
+    radial-gradient(circle at 50% 50%, rgba(5, 6, 8, 0.9) 0%, transparent 100%);
+  background-attachment: fixed;
+}
+
+/* Custom Scrollbar - Black and Dark Red */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #050608;
+}
+::-webkit-scrollbar-thumb {
+  background: #1c1f26;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #b91c1c;
+}
+
+/* TARAS Live Mode Dynamic Environment Modifiers */
+.taras-live-mode-active body {
+  background-image:
+    radial-gradient(circle at 20% 20%, rgba(185, 28, 28, 0.22) 0%, transparent 60%),
+    radial-gradient(circle at 80% 80%, rgba(127, 29, 29, 0.18) 0%, transparent 60%),
+    radial-gradient(circle at 50% 50%, rgba(5, 6, 8, 0.95) 0%, transparent 100%);
+}
+
+.taras-live-mode-active .glass-panel {
+  border-color: rgba(185, 28, 28, 0.3);
+  box-shadow: 0 0 20px rgba(185, 28, 28, 0.15);
+}
+
+/* Spider-web Grid background pattern */
+.bg-web-grid {
+  background-size: 40px 40px;
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+}
+
+.bg-web-radial {
+  background: radial-gradient(circle at center, rgba(127, 29, 29, 0.12) 0%, rgba(10, 12, 16, 0.8) 50%, transparent 80%);
+}
+
+/* Glassmorphic panels - Monochromatic Black + Dark Red */
+.glass-panel {
+  background: rgba(10, 12, 16, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-panel-glow {
+  background: rgba(12, 14, 20, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(127, 29, 29, 0.35);
+  box-shadow: 0 8px 32px 0 rgba(127, 29, 29, 0.12);
+}
+
+/* Text Gradients — strictly White → Dark Red, NO pink */
+.text-gradient-red {
+  background: linear-gradient(135deg, #ffffff 0%, #cc0000 50%, #7f1d1d 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.text-gradient-web {
+  background: linear-gradient(135deg, #ffffff 30%, #b91c1c 70%, #7f1d1d 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Custom cursor */
+.taras-cursor-dot {
+  width: 8px;
+  height: 8px;
+  background: #f8fafc;
+  border-radius: 50%;
+  position: fixed;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 9999;
+  transform: translate(-50%, -50%);
+  will-change: transform;
+}
+
+.taras-cursor-ring {
+  width: 24px;
+  height: 24px;
+  border: 1.5px solid rgba(185, 28, 28, 0.5);
+  border-radius: 50%;
+  position: fixed;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 9998;
+  transform: translate(-50%, -50%);
+  will-change: transform;
+  transition: width 0.2s ease, height 0.2s ease, border-color 0.2s ease;
+}
+
+.taras-cursor-ring.on-cta {
+  width: 38px;
+  height: 38px;
+  border-color: rgba(185, 28, 28, 1);
+}
+
+/* Animations */
+@keyframes webPulse {
+  0%, 100% { opacity: 0.3; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.02); }
+}
+
+@keyframes redPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(185, 28, 28, 0); }
+  50% { box-shadow: 0 0 0 8px rgba(185, 28, 28, 0.15); }
+}
+
+@keyframes flipIn {
+  from { transform: rotateX(-90deg) translateY(-4px); opacity: 0; }
+  to { transform: rotateX(0deg) translateY(0); opacity: 1; }
+}
+
+@keyframes floatSlow {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-7px); }
+}
+
+@keyframes floatDelayed {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(6px); }
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 16px rgba(220, 38, 38, 0.35), 0 0 32px rgba(185, 28, 28, 0.15);
+  }
+  50% {
+    box-shadow: 0 0 28px rgba(220, 38, 38, 0.65), 0 0 50px rgba(185, 28, 28, 0.3);
+  }
+}
+
+@keyframes borderGlowPulse {
+  0%, 100% {
+    border-color: rgba(220, 38, 38, 0.25);
+    box-shadow: 0 0 8px rgba(220, 38, 38, 0.1);
+  }
+  50% {
+    border-color: rgba(220, 38, 38, 0.75);
+    box-shadow: 0 0 20px rgba(220, 38, 38, 0.25);
+  }
+}
+
+@keyframes marqueeScroll {
+  0% { transform: translateX(0%); }
+  100% { transform: translateX(-50%); }
+}
+
+@keyframes cyberShimmer {
+  0% { transform: translateX(-100%) skewX(-15deg); }
+  100% { transform: translateX(250%) skewX(-15deg); }
+}
+
+.animate-web-pulse {
+  animation: webPulse 6s ease-in-out infinite;
+}
+
+.animate-red-pulse {
+  animation: redPulse 2.5s ease-in-out infinite;
+}
+
+.animate-flip-in {
+  animation: flipIn 0.25s cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.animate-float {
+  animation: floatSlow 4s ease-in-out infinite;
+}
+
+.animate-float-delayed {
+  animation: floatDelayed 5s ease-in-out infinite 1s;
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 2.5s ease-in-out infinite;
+}
+
+.animate-border-pulse {
+  animation: borderGlowPulse 3s ease-in-out infinite;
+}
+
+.animate-marquee {
+  display: flex;
+  width: max-content;
+  animation: marqueeScroll 32s linear infinite;
+}
+
+.animate-marquee:hover {
+  animation-play-state: paused;
+}
+
+/* Micro-interaction utility classes */
+.hover-glow-red {
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.hover-glow-red:hover {
+  transform: translateY(-2px);
+  border-color: rgba(220, 38, 38, 0.6);
+  box-shadow: 0 8px 24px -4px rgba(220, 38, 38, 0.3);
+}
+
+/* Reduced motion — disable all decorative animations */
+@media (prefers-reduced-motion: reduce) {
+  .animate-web-pulse,
+  .animate-red-pulse,
+  .animate-flip-in,
+  .animate-float,
+  .animate-float-delayed,
+  .animate-pulse-glow,
+  .animate-border-pulse,
+  .animate-marquee,
+  [class*='animate-'] {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ─── TARAS 2K26 Digital Pass — Portal Print Architecture ──────────────────── */
+
+/* The print portal (#taras-print-only-pass) is only injected into <body>       */
+/* immediately before window.print() fires and removed after printing closes.   */
+/* This guarantees the print layout is completely isolated from the React app.  */
+
+/* Screen: hide the portal div completely (it only exists briefly during print) */
+#taras-print-only-pass {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm 15mm;
+  }
+
+  /* Hide everything on the page */
+  body > *:not(#taras-print-only-pass) {
+    display: none !important;
+  }
+
+  /* Show the print portal */
+  #taras-print-only-pass {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* ── Pass Card ── */
+  .taras-print-pass-card {
+    width: 100%;
+    max-width: 500px;
+    margin: 0 auto;
+    padding: 24px 28px;
+    border: 3px solid #b91c1c;
+    border-radius: 16px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    color: #000000;
+    background: #ffffff;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* ── Header ── */
+  .taras-print-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding-bottom: 14px;
+    border-bottom: 2px solid #b91c1c;
+    margin-bottom: 20px;
+  }
+
+  .taras-print-logo {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    border: 2px solid #b91c1c;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    font-weight: 900;
+    color: #b91c1c;
+    flex-shrink: 0;
+  }
+
+  .taras-print-title {
+    font-size: 13px;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    color: #000000;
+    text-transform: uppercase;
+  }
+
+  .taras-print-subtitle {
+    font-size: 9px;
+    color: #555555;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-top: 1px;
+  }
+
+  .taras-print-status {
+    margin-left: auto;
+    padding: 4px 10px;
+    border-radius: 99px;
+    border: 1.5px solid #b91c1c;
+    font-size: 9px;
+    font-weight: 700;
+    color: #b91c1c;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* ── Body ── */
+  .taras-print-body {
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+    margin-bottom: 20px;
+  }
+
+  /* ── QR ── */
+  .taras-print-qr-container {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 10px;
+    border: 2px solid #b91c1c;
+    border-radius: 12px;
+    background: #ffffff;
+  }
+
+  .taras-print-qr-container svg {
+    display: block;
+    width: 160px !important;
+    height: 160px !important;
+  }
+
+  .taras-print-qr-label {
+    font-size: 7px;
+    font-weight: 700;
+    color: #000000;
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  /* ── Details ── */
+  .taras-print-details {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .taras-print-field {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .taras-print-field-row {
+    display: flex;
+    gap: 20px;
+  }
+
+  .taras-print-label {
+    font-size: 8px;
+    font-weight: 600;
+    color: #666666;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .taras-print-value {
+    font-size: 11px;
+    font-weight: 600;
+    color: #000000;
+  }
+
+  .taras-print-value-lg {
+    font-size: 14px;
+    font-weight: 900;
+    color: #000000;
+    line-height: 1.2;
+  }
+
+  .taras-print-value-red {
+    font-size: 11px;
+    font-weight: 800;
+    color: #b91c1c;
+  }
+
+  .taras-print-events {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 2px;
+  }
+
+  .taras-print-event-chip {
+    padding: 2px 7px;
+    border: 1px solid #b91c1c;
+    border-radius: 4px;
+    font-size: 8px;
+    font-weight: 700;
+    color: #b91c1c;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  /* ── Footer ── */
+  .taras-print-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 12px;
+    border-top: 1px solid #cccccc;
+    font-size: 8px;
+    color: #555555;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+}
+
+/* ── Scanner Viewfinder Animation ── */
+@keyframes qrScanline {
+  0% {
+    top: 8%;
+    opacity: 0.3;
+  }
+  20% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    top: 92%;
+    opacity: 0.3;
+  }
+}
+
+.animate-scanline {
+  animation: qrScanline 2s ease-in-out infinite alternate;
+}
