@@ -1,17 +1,106 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Badge } from '../components/common/Badge';
 import { Button } from '../components/common/Button';
 import { VisualAtmosphere } from '../components/visual/VisualAtmosphere';
-import { MapPin, Navigation, Bus, Train, HelpCircle, Compass, Sparkles, ShieldCheck } from 'lucide-react';
+import {
+  MapPin,
+  Navigation,
+  Bus,
+  Train,
+  HelpCircle,
+  Compass,
+  Sparkles,
+  ShieldCheck,
+  PhoneCall,
+  ExternalLink,
+  Clock,
+  Layers,
+  Car,
+  Plane,
+  CheckCircle2,
+  Share2,
+  Copy,
+} from 'lucide-react';
 import { fadeInUp, cardEntrance, staggerContainer } from '../motion/variants';
 
 export const VenuePage: React.FC = () => {
+  const [copiedCoords, setCopiedCoords] = useState(false);
+
+  const handleCopyCoords = () => {
+    navigator.clipboard.writeText('12.8252, 80.0460');
+    setCopiedCoords(true);
+    setTimeout(() => setCopiedCoords(false), 2000);
+  };
+
   const eventZones = [
-    { name: 'Ground Floor Quadrangle', purpose: 'Registration Desks & QR Scan Entry Gate', status: '08:00 AM' },
-    { name: 'Main Auditorium', purpose: 'Inaugural, Quiz Finals & Valedictory', status: '09:30 AM' },
-    { name: 'ECE Block Floor 2', purpose: 'Circuitrix Debugging Lab & DSP Hackathon', status: '10:30 AM' },
-    { name: 'ECE Block Floor 3', purpose: 'Paperionix Seminar Halls & VLSI EDA Lab', status: '10:00 AM' },
+    {
+      id: 'z1',
+      name: 'Ground Floor Quadrangle',
+      purpose: 'Main Registration Desks, Help Desk & QR Scan Gate',
+      time: '08:00 AM ONWARDS',
+      badge: 'ENTRY GATE',
+      icon: <Layers className="w-5 h-5 text-[#ff2b2b]" />,
+    },
+    {
+      id: 'z2',
+      name: 'Main College Auditorium',
+      purpose: 'Inaugural Ceremony, Technical Quiz & Valedictory',
+      time: '09:30 AM - 04:30 PM',
+      badge: 'MAIN AUDI',
+      icon: <Sparkles className="w-5 h-5 text-[#ff2b2b]" />,
+    },
+    {
+      id: 'z3',
+      name: 'ECE Block — Floor 2',
+      purpose: 'Circuitrix Debugging Lab & Embedded Systems Hackathon',
+      time: '10:30 AM ONWARDS',
+      badge: 'FLOOR 2 LABS',
+      icon: <ShieldCheck className="w-5 h-5 text-[#ff2b2b]" />,
+    },
+    {
+      id: 'z4',
+      name: 'ECE Block — Floor 3',
+      purpose: 'Paperionix Seminar Halls & VLSI EDA Design Center',
+      time: '10:00 AM ONWARDS',
+      badge: 'FLOOR 3 HALLS',
+      icon: <Compass className="w-5 h-5 text-[#ff2b2b]" />,
+    },
+  ];
+
+  const travelModes = [
+    {
+      title: 'Suburban Train Network',
+      subtitle: 'Fastest & Direct Access',
+      desc: 'Take the Tambaram – Chengalpattu Suburban Line and alight at Potheri Railway Station. The campus main gate is just 200 meters (2-min walk).',
+      badge: 'RECOMMENDED',
+      icon: <Train className="w-6 h-6 text-[#ff2b2b]" />,
+      timing: 'Frequency: Every 15 mins',
+    },
+    {
+      title: 'MTC & State Bus Service',
+      subtitle: 'GST Road Highway NH-45',
+      desc: 'Any MTC bus or State Express traveling towards Chengalpattu/Guduvanchery stops directly at Potheri Bus Stop right opposite SRM Valliammai.',
+      badge: 'HIGHWAY ACCESS',
+      icon: <Bus className="w-6 h-6 text-[#ff2b2b]" />,
+      timing: 'Stop: Potheri BS',
+    },
+    {
+      title: 'Private Vehicle & Parking',
+      subtitle: 'Dedicated Campus Parking',
+      desc: 'Access via GST Road (NH-45). Secure multi-wheeler and 2-wheeler parking zones are available at Gate 2 with security assistance.',
+      badge: 'FREE PARKING',
+      icon: <Car className="w-6 h-6 text-[#ff2b2b]" />,
+      timing: 'Gate 2 Entrance',
+    },
+    {
+      title: 'Airport Transit',
+      subtitle: 'Chennai International (MAA)',
+      desc: 'Chennai International Airport is 24 km away. Direct suburban trains run from Tirusulam Station (Airport) to Potheri Station in 35 mins.',
+      badge: 'AIRPORT CONECT',
+      icon: <Plane className="w-6 h-6 text-[#ff2b2b]" />,
+      timing: '35 mins via Rail',
+    },
   ];
 
   return (
@@ -19,177 +108,225 @@ export const VenuePage: React.FC = () => {
       initial="hidden"
       animate="visible"
       variants={fadeInUp}
-      className="space-y-10 pb-24"
+      className="space-y-12 pb-24"
     >
-      {/* Level 1 & 2 Architectural Map Web Grid Atmosphere */}
+      {/* ── Level 1 & 2 Architectural Header Atmosphere ── */}
       <VisualAtmosphere
         environmentKey="venue"
-        badgeText="CAMPUS LOCATION & MAP"
-        title="VENUE & CAMPUS GUIDE"
-        subtitle="SRM Valliammai Engineering College • Kattankulathur, Chengalpattu – 603203."
+        badgeText="NATIONAL LEVEL SYMPOSIUM ARENA"
+        title="VENUE & CAMPUS NAVIGATION"
+        subtitle="SRM Valliammai Engineering College • Department of ECE • Kattankulathur, Chengalpattu – 603203."
         height="compact"
       />
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
-        {/* ── Featured Venue Artwork Showcase (Spider-Man: Brand New Day) ── */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
+        {/* ── FEATURED HERO VENUE SHOWCASE CARD ── */}
         <motion.div
           variants={cardEntrance}
-          whileHover={{ scale: 1.01 }}
-          transition={{ duration: 0.3 }}
-          className="relative rounded-3xl p-2 sm:p-3 bg-gradient-to-b from-[#1c0404] via-[#0a0c10] to-[#050608] border-2 border-[#dc2626]/60 shadow-[0_0_50px_rgba(220,38,38,0.25)] overflow-hidden group"
+          whileHover={{ scale: 1.005 }}
+          className="relative rounded-3xl p-3 sm:p-5 bg-[#08090d] border-2 border-[#dc2626]/70 shadow-[0_0_60px_rgba(220,38,38,0.25)] overflow-hidden group"
         >
-          {/* Header Tag */}
-          <div className="absolute top-6 left-6 z-20 flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/80 border border-[#dc2626]/80 backdrop-blur-md shadow-[0_0_20px_rgba(220,38,38,0.4)]">
-            <Sparkles className="w-4 h-4 text-[#ff2b2b] animate-pulse" />
-            <span className="text-xs font-mono font-bold text-white tracking-widest uppercase">
-              SRM VALLIAMMAI CAMPUS // BRAND NEW DAY
-            </span>
+          {/* Top Floating Badge Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4 px-2">
+            <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/80 border border-[#dc2626]/80 backdrop-blur-md shadow-[0_0_20px_rgba(220,38,38,0.4)]">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#ff2b2b] animate-ping" />
+              <span className="text-xs font-mono font-bold text-white tracking-wider uppercase">
+                OFFICIAL ARENA // SRM VALLIAMMAI CAMPUS
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleCopyCoords}
+                className="px-3 py-1.5 rounded-xl bg-[#1a0000] border border-[#dc2626]/60 hover:border-[#dc2626] text-[11px] font-mono font-bold text-slate-200 hover:text-white transition-all flex items-center gap-1.5"
+              >
+                {copiedCoords ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-[#ff2b2b]" />}
+                {copiedCoords ? 'GPS COORDS COPIED!' : '12.8252° N, 80.0460° E'}
+              </button>
+              <Badge variant="crimson" size="md">LIVE ARENA 26 SEPT</Badge>
+            </div>
           </div>
 
-          {/* Full Image Display Container */}
-          <div className="relative w-full rounded-2xl overflow-hidden bg-[#030406] flex items-center justify-center min-h-[300px] sm:min-h-[420px] lg:min-h-[500px]">
+          {/* Full Campus Image Frame with Pristine Aspect Ratio */}
+          <div className="relative w-full rounded-2xl overflow-hidden bg-[#030406] border border-[#dc2626]/30 shadow-2xl flex items-center justify-center min-h-[320px] sm:min-h-[460px] lg:min-h-[580px]">
             <img
-              src="/images/venue/spiderman-brand-new-day.jpg"
-              alt="TARAS 2K26 Venue - Spider-Man: Brand New Day Artwork"
-              className="w-full h-full max-h-[600px] object-contain transition-transform duration-700 ease-out group-hover:scale-[1.02]"
+              src="/images/venue/venue-campus-hd.jpg"
+              alt="SRM Valliammai Engineering College Campus - TARAS 2K26 Venue"
+              className="w-full h-full max-h-[700px] object-contain transition-transform duration-700 ease-out group-hover:scale-[1.015]"
               loading="eager"
             />
 
-            {/* Subtle Vignette & Glow Overlay for Seamless Blending */}
-            <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-[#050608] via-transparent to-[#050608]/40" />
+            {/* Ambient Lighting Gradient Overlays for Cinematic Blending */}
+            <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-[#050608] via-transparent to-[#050608]/30" />
             <div className="absolute inset-0 pointer-events-none ring-1 ring-inset ring-white/10 rounded-2xl" />
           </div>
 
-          {/* Caption / Interactive Info Bar */}
-          <div className="p-4 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-t border-[#dc2626]/30 bg-[#0a0c10]/90 rounded-b-2xl">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 text-[#ff2b2b] font-mono text-xs font-bold uppercase tracking-wider">
-                <Compass className="w-4 h-4" /> Official Symposium Arena
+          {/* Campus Details Footer Bar inside Card */}
+          <div className="mt-4 p-5 sm:p-6 rounded-2xl bg-[#0b0d13] border border-[#dc2626]/40 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+            <div className="space-y-1.5 max-w-3xl">
+              <div className="flex items-center gap-2 text-[#ff2b2b] font-mono text-xs font-bold uppercase tracking-widest">
+                <Compass className="w-4 h-4" /> MAIN SYMPOSIUM LOCATION
               </div>
-              <h3 className="text-lg sm:text-xl font-extrabold text-white font-mono">
-                Department of Electronics & Communication Engineering
-              </h3>
-              <p className="text-xs text-slate-300 font-light max-w-xl">
-                Experience cutting-edge tech competitions and technical presentations at the state-of-the-art SRM Valliammai ECE Complex.
+              <h2 className="text-xl sm:text-2xl font-extrabold text-white font-mono">
+                Department of Electronics & Communication Engineering (ECE)
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-300 font-light leading-relaxed">
+                SRM Valliammai Engineering College (An Autonomous Institution, Accredited by NBA & NAAC 'A' Grade), Kattankulathur, Chengalpattu District, Tamil Nadu – 603203.
               </p>
             </div>
 
-            <a
-              href="https://maps.google.com/?q=SRM+Valliammai+Engineering+College"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="shrink-0 w-full sm:w-auto"
-            >
-              <Button variant="glow" size="md" icon={<Navigation className="w-4 h-4" />}>
-                Get Directions
-              </Button>
-            </a>
+            <div className="flex flex-wrap items-center gap-3 w-full md:w-auto shrink-0">
+              <a
+                href="https://maps.google.com/?q=SRM+Valliammai+Engineering+College"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full sm:w-auto"
+              >
+                <Button variant="glow" size="md" icon={<Navigation className="w-4 h-4" />}>
+                  Open Google Maps
+                </Button>
+              </a>
+            </div>
           </div>
         </motion.div>
 
-        {/* ── Grid: Campus Map & Event Zones ── */}
+        {/* ── DESIGNATED EVENT ZONES GRID ── */}
         <motion.div
           variants={staggerContainer}
           initial="hidden"
           whileInView="visible"
-          viewport={{ once: true, margin: '-50px' }}
-          className="grid grid-cols-1 lg:grid-cols-3 gap-8"
+          viewport={{ once: true, margin: '-40px' }}
+          className="space-y-6"
         >
-          <div className="lg:col-span-2 space-y-6">
-            {/* Map Environment Card */}
-            <motion.div variants={cardEntrance} className="glass-panel-glow rounded-2xl p-6 border border-[#b91c1c]/40 space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xl font-bold text-white font-mono flex items-center gap-2">
-                  <MapPin className="w-5 h-5 text-[#b91c1c]" /> SRM Valliammai Campus Map
-                </h3>
-                <Badge variant="crimson">26 SEPT ACTIVE</Badge>
-              </div>
-              <div className="w-full h-72 rounded-xl bg-[#0a0c10] border border-[#b91c1c]/40 flex flex-col items-center justify-center p-6 text-center relative overflow-hidden group">
-                <img
-                  src="/images/venue/venue-map.jpg"
-                  alt="SRM Valliammai Architectural Map Grid"
-                  className="absolute inset-0 w-full h-full object-cover opacity-60 brightness-90 contrast-125 group-hover:scale-105 transition-transform duration-500"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-[#0a0c10] via-transparent to-[#0a0c10]/80" />
-                <MapPin className="w-10 h-10 text-[#b91c1c] mb-3 animate-bounce relative z-10" />
-                <h4 className="text-base font-bold text-white font-mono relative z-10">SRM Valliammai ECE Block</h4>
-                <p className="text-xs text-slate-300 mt-1 relative z-10 font-mono">
-                  Kattankulathur (Potheri Railway Station • GST Road NH-45)
-                </p>
-                <a
-                  href="https://maps.google.com/?q=SRM+Valliammai+Engineering+College"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-4 relative z-10"
-                >
-                  <Button variant="glow" size="sm" icon={<Navigation className="w-4 h-4" />}>
-                    Open Google Maps
-                  </Button>
-                </a>
-              </div>
-            </motion.div>
-
-            {/* Event Zones */}
-            <motion.div variants={cardEntrance} className="space-y-4">
-              <h3 className="text-lg font-bold text-white font-mono flex items-center gap-2">
-                <ShieldCheck className="w-5 h-5 text-[#dc2626]" /> Designated Event Areas
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#dc2626]/30 pb-4">
+            <div>
+              <h3 className="text-2xl font-extrabold text-white font-mono flex items-center gap-2.5">
+                <Layers className="w-6 h-6 text-[#ff2b2b]" /> Designated Symposium Zones
               </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {eventZones.map((z, idx) => (
-                  <motion.div
-                    key={idx}
-                    whileHover={{ scale: 1.02, y: -2 }}
-                    transition={{ duration: 0.2 }}
-                    className="glass-panel p-4 rounded-xl border border-[#b91c1c]/30 hover:border-[#b91c1c]/70 transition-all space-y-1.5 shadow-md hover:shadow-[0_0_20px_rgba(220,38,38,0.15)]"
-                  >
-                    <div className="flex items-center justify-between">
-                      <h4 className="font-bold text-white text-sm font-mono">{z.name}</h4>
-                      <span className="text-[10px] font-mono text-[#b91c1c] font-bold px-2 py-0.5 rounded bg-[#1a0000] border border-[#dc2626]/40">{z.status}</span>
-                    </div>
-                    <p className="text-xs text-slate-300 font-light">{z.purpose}</p>
-                  </motion.div>
-                ))}
-              </div>
-            </motion.div>
+              <p className="text-xs text-slate-400 font-mono mt-1">
+                Find your assigned event halls, registration desk, and competition labs
+              </p>
+            </div>
+            <Badge variant="red" size="md">4 ACTIVE ZONES</Badge>
           </div>
 
-          {/* Sidebar */}
-          <motion.div variants={cardEntrance} className="space-y-6">
-            <div className="glass-panel-glow p-6 rounded-2xl space-y-4 border border-[#b91c1c]/40 shadow-xl">
-              <h3 className="text-base font-bold text-white font-mono flex items-center gap-2">
-                <Compass className="w-5 h-5 text-[#dc2626]" /> How to Reach Us
-              </h3>
-              <div className="space-y-4 text-xs text-slate-300 font-light leading-relaxed">
-                <div className="flex items-start gap-3 p-3 rounded-xl bg-[#0a0c10] border border-white/5">
-                  <Train className="w-5 h-5 text-[#b91c1c] shrink-0 mt-0.5" />
-                  <div>
-                    <strong className="text-white block font-mono text-sm">By Suburban Train:</strong>
-                    Take the Tambaram–Chengalpattu local line and alight at <strong className="text-[#ff2b2b]">Potheri Station</strong> (2-minute walk to campus gate).
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            {eventZones.map((zone) => (
+              <motion.div
+                key={zone.id}
+                variants={cardEntrance}
+                whileHover={{ scale: 1.03, y: -4 }}
+                transition={{ duration: 0.25 }}
+                className="glass-panel p-5 rounded-2xl border border-[#dc2626]/40 hover:border-[#dc2626] transition-all space-y-3 shadow-lg hover:shadow-[0_0_30px_rgba(220,38,38,0.2)] flex flex-col justify-between"
+              >
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="p-2 rounded-xl bg-[#1a0000] border border-[#dc2626]/50 shrink-0">
+                      {zone.icon}
+                    </div>
+                    <span className="text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-[#1a0000] border border-[#dc2626]/60 text-[#ff2b2b]">
+                      {zone.badge}
+                    </span>
                   </div>
+                  <h4 className="text-base font-bold text-white font-mono leading-snug">{zone.name}</h4>
+                  <p className="text-xs text-slate-300 font-light leading-relaxed">{zone.purpose}</p>
                 </div>
-                <div className="flex items-start gap-3 p-3 rounded-xl bg-[#0a0c10] border border-white/5">
-                  <Bus className="w-5 h-5 text-[#b91c1c] shrink-0 mt-0.5" />
-                  <div>
-                    <strong className="text-white block font-mono text-sm">By MTC Bus:</strong>
-                    Any bus traveling via GST Road (NH-45) stops at <strong className="text-[#ff2b2b]">Potheri Bus Stop</strong> right opposite the university main entrance.
-                  </div>
-                </div>
-              </div>
-            </div>
 
-            <div className="glass-panel p-6 rounded-2xl border border-[#b91c1c]/40 space-y-3 shadow-xl">
-              <h3 className="text-base font-bold text-white font-mono flex items-center gap-2">
-                <HelpCircle className="w-5 h-5 text-[#b91c1c]" /> Help Desk & Assistance
+                <div className="pt-3 border-t border-white/10 flex items-center justify-between text-[11px] font-mono text-slate-400">
+                  <span className="flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5 text-[#ff2b2b]" /> TIMING
+                  </span>
+                  <strong className="text-white">{zone.time}</strong>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </motion.div>
+
+        {/* ── TRAVEL & TRANSPORTATION MATRIX ── */}
+        <motion.div
+          variants={staggerContainer}
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, margin: '-40px' }}
+          className="space-y-6"
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#dc2626]/30 pb-4">
+            <div>
+              <h3 className="text-2xl font-extrabold text-white font-mono flex items-center gap-2.5">
+                <Compass className="w-6 h-6 text-[#ff2b2b]" /> How to Reach the Campus
               </h3>
-              <p className="text-xs text-slate-300 leading-relaxed font-light">
-                Visit the Registration Help Desk at the Ground Floor Quadrangle upon arrival for QR scan check-in and assistance.
+              <p className="text-xs text-slate-400 font-mono mt-1">
+                Multiple convenient transit options connecting Chennai city & suburban routes
               </p>
-              <div className="text-sm font-mono text-[#ff2b2b] font-bold pt-2 flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-[#dc2626] animate-ping" />
-                +91 98401 23456
-              </div>
             </div>
-          </motion.div>
+            <Badge variant="crimson" size="md">POTHERI NH-45</Badge>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+            {travelModes.map((mode, idx) => (
+              <motion.div
+                key={idx}
+                variants={cardEntrance}
+                whileHover={{ scale: 1.02, y: -3 }}
+                className="glass-panel p-5 rounded-2xl border border-[#dc2626]/30 hover:border-[#dc2626]/70 transition-all space-y-3 shadow-lg flex flex-col justify-between"
+              >
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="p-2.5 rounded-xl bg-[#1a0000] border border-[#dc2626]/50">
+                      {mode.icon}
+                    </div>
+                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-black/60 border border-slate-700 text-slate-300">
+                      {mode.badge}
+                    </span>
+                  </div>
+                  <h4 className="text-base font-bold text-white font-mono">{mode.title}</h4>
+                  <span className="text-[11px] font-mono text-[#ff2b2b] block font-semibold">{mode.subtitle}</span>
+                  <p className="text-xs text-slate-300 font-light leading-relaxed">{mode.desc}</p>
+                </div>
+
+                <div className="pt-3 border-t border-white/10 text-[11px] font-mono text-slate-400 font-semibold">
+                  {mode.timing}
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </motion.div>
+
+        {/* ── HELP DESK & EMERGENCY CONTACT CONSOLE ── */}
+        <motion.div
+          variants={cardEntrance}
+          className="p-6 sm:p-8 rounded-3xl bg-gradient-to-r from-[#120303] via-[#0a0c10] to-[#07090d] border-2 border-[#dc2626]/60 shadow-[0_0_40px_rgba(220,38,38,0.2)] flex flex-col md:flex-row items-start md:items-center justify-between gap-6"
+        >
+          <div className="space-y-2 max-w-2xl">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#1a0000] border border-[#dc2626]/50 text-xs font-mono font-bold text-[#ff2b2b]">
+              <HelpCircle className="w-4 h-4" /> CAMPUS ASSISTANCE DESK
+            </div>
+            <h3 className="text-xl sm:text-2xl font-extrabold text-white font-mono">
+              Need Help Finding Your Hall or Event Zone?
+            </h3>
+            <p className="text-xs sm:text-sm text-slate-300 font-light leading-relaxed">
+              Our Registration Coordinators and Student Volunteers are posted at the Ground Floor Quadrangle to guide you.
+            </p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto shrink-0">
+            <a href="tel:+919840123456" className="w-full sm:w-auto">
+              <Button variant="glow" size="md" icon={<PhoneCall className="w-4 h-4" />}>
+                Call Desk: +91 98401 23456
+              </Button>
+            </a>
+            <a
+              href="https://maps.google.com/?q=SRM+Valliammai+Engineering+College"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full sm:w-auto"
+            >
+              <Button variant="outline" size="md" icon={<ExternalLink className="w-4 h-4" />}>
+                Open GPS
+              </Button>
+            </a>
+          </div>
         </motion.div>
       </div>
     </motion.div>
