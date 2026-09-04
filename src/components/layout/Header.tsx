@@ -49,15 +49,18 @@ export const Header: React.FC<HeaderProps> = ({
         }`}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4">
-          {/* TARAS Logo */}
+          {/* TARAS Cyber Spider Shield Logo */}
           <Link to="/" className="flex items-center gap-3 group shrink-0">
-            <div className="relative flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-[#0a0c10] border-2 border-[#dc2626]/40 group-hover:border-[#dc2626] group-hover:shadow-[0_0_20px_rgba(220,38,38,0.5)] transition-all shadow-[0_0_15px_rgba(220,38,38,0.25)] shrink-0 overflow-hidden">
-              <img
-                src="/taras-logo.png"
-                alt="TARAS 2K26 Logo"
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                loading="eager"
-              />
+            <div className="relative p-[2px] rounded-2xl bg-gradient-to-tr from-[#dc2626] via-[#ff3333] to-[#7f1d1d] shadow-[0_0_20px_rgba(220,38,38,0.5)] group-hover:shadow-[0_0_35px_rgba(220,38,38,0.95)] group-hover:scale-105 transition-all duration-500 shrink-0">
+              <div className="flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 rounded-[14px] bg-[#07090d] border border-[#dc2626]/60 overflow-hidden relative">
+                <div className="absolute inset-0 bg-gradient-to-br from-[#b91c1c]/20 via-transparent to-black pointer-events-none" />
+                <img
+                  src="/taras-logo.png"
+                  alt="TARAS 2K26 Logo"
+                  className="w-full h-full object-cover group-hover:rotate-3 transition-transform duration-500 relative z-10"
+                  loading="eager"
+                />
+              </div>
             </div>
 
             <div className="flex flex-col">

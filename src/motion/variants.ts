@@ -39,16 +39,18 @@ export const cardEntrance: Variants = {
 
 /** Page-level entrance */
 export const pageTransitionIn: Variants = {
-  initial: { opacity: reduced ? 1 : 0, y: reduced ? 0 : 12 },
+  initial: { opacity: reduced ? 1 : 0, y: reduced ? 0 : 16, scale: reduced ? 1 : 0.99 },
   animate: {
     opacity: 1,
     y: 0,
-    transition: { duration: reduced ? 0 : 0.35, ease: easeCustom },
+    scale: 1,
+    transition: { duration: reduced ? 0 : 0.42, ease: easeCustom },
   },
   exit: {
     opacity: reduced ? 1 : 0,
-    y: reduced ? 0 : -8,
-    transition: { duration: reduced ? 0 : 0.2, ease: 'easeIn' },
+    y: reduced ? 0 : -10,
+    scale: reduced ? 1 : 0.99,
+    transition: { duration: reduced ? 0 : 0.22, ease: 'easeIn' },
   },
 };
 

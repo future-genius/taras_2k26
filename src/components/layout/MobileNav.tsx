@@ -59,16 +59,18 @@ export const MobileNav: React.FC<MobileNavProps> = ({ isOpen, onClose, links, on
         >
           {/* Top bar */}
           <div className="flex items-center justify-between px-6 py-5 border-b border-[#1a0000]/80">
-            <Link to="/" className="flex items-center gap-2" onClick={onClose}>
-              <div className="w-8 h-8 rounded-xl bg-[#050608] border border-[#7f1d1d]/60 flex items-center justify-center overflow-hidden">
-                <img
-                  src="/taras-logo.png"
-                  alt="TARAS 2K26"
-                  className="w-full h-full object-contain p-0.5"
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none';
-                  }}
-                />
+            <Link to="/" className="flex items-center gap-2.5" onClick={onClose}>
+              <div className="relative p-[1.5px] rounded-xl bg-gradient-to-tr from-[#dc2626] via-[#ff3333] to-[#7f1d1d] shadow-[0_0_15px_rgba(220,38,38,0.5)]">
+                <div className="w-8 h-8 rounded-[10px] bg-[#07090d] border border-[#dc2626]/60 flex items-center justify-center overflow-hidden">
+                  <img
+                    src="/taras-logo.png"
+                    alt="TARAS 2K26"
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
+                </div>
               </div>
               <span className="text-lg font-black font-mono text-white">
                 TARAS<span className="text-[#b91c1c]">2K26</span>

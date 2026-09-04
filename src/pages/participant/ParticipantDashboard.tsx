@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { useAuth } from '../../context/AuthContext';
 import { subscribeToUserTeams, getTeamJoinRequestsForLeader, getParticipantJoinRequests } from '../../services/teamService';
 import { MOCK_EVENTS } from '../../data/events';
@@ -362,22 +363,54 @@ export const ParticipantDashboard: React.FC = () => {
 
         <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(ellipse at center, transparent 50%, rgba(5,6,8,0.7) 100%)' }} />
 
-        <div className="relative z-10 flex flex-col items-center justify-center text-center px-4 pt-28 pb-20">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-mono font-semibold uppercase tracking-widest bg-black/70 border border-[#dc2626]/50 text-white shadow-[0_0_20px_rgba(220,38,38,0.3)] mb-5 backdrop-blur-sm">
-            <span className="w-2 h-2 rounded-full bg-[#dc2626] animate-pulse" />
-            WELCOME BACK // {participantProfile.participantId}
-          </div>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.65, ease: [0.23, 1, 0.32, 1] }}
+          className="relative z-10 flex flex-col items-center justify-center text-center px-4 pt-28 pb-20"
+        >
+          {/* Glowing Animated ID Badge */}
+          <motion.div
+            whileHover={{ scale: 1.05 }}
+            className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-mono font-semibold uppercase tracking-widest bg-[#07090d]/90 border border-[#dc2626]/70 text-white shadow-[0_0_25px_rgba(220,38,38,0.45)] mb-5 backdrop-blur-md"
+          >
+            <span className="w-2.5 h-2.5 rounded-full bg-[#ff2b2b] animate-ping" />
+            <span className="text-[#ff4d4d] font-bold">WELCOME BACK</span> // {participantProfile.participantId}
+          </motion.div>
 
-          <h1 className="text-5xl sm:text-6xl md:text-7xl font-extrabold tracking-tight mb-3">
-            <span className="bg-gradient-to-r from-[#ff2b2b] via-[#ff6666] to-[#dc2626] bg-clip-text text-transparent drop-shadow-[0_4px_30px_rgba(220,38,38,0.85)] filter">
+          {/* Theme-Matched Crimson Gradient Name */}
+          <h1 className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-extrabold tracking-tight mb-3">
+            <span className="bg-gradient-to-r from-[#ff2b2b] via-[#ff6666] to-[#dc2626] bg-clip-text text-transparent drop-shadow-[0_4px_35px_rgba(220,38,38,0.9)] filter">
               {participantProfile.fullName}
             </span>
           </h1>
 
-          <p className="text-base sm:text-lg text-slate-300 font-light font-mono drop-shadow-lg">
+          <p className="text-sm sm:text-base md:text-lg text-slate-300 font-light font-mono drop-shadow-lg mb-6 max-w-2xl">
             {participantProfile.college} &bull; {participantProfile.department} ({participantProfile.year} Year)
           </p>
-        </div>
+
+          {/* Dynamic Cyber Stats Chips Bar */}
+          <div className="flex flex-wrap items-center justify-center gap-3 max-w-3xl">
+            <div className="px-3.5 py-1.5 rounded-xl bg-black/60 border border-[#dc2626]/40 backdrop-blur-sm text-xs font-mono flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-400" />
+              <span className="text-slate-400">EVENTS:</span>
+              <strong className="text-white">{participantProfile.registeredEvents.length} TRACKS</strong>
+            </div>
+
+            <div className="px-3.5 py-1.5 rounded-xl bg-black/60 border border-[#dc2626]/40 backdrop-blur-sm text-xs font-mono flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-[#ff2b2b] animate-pulse" />
+              <span className="text-slate-400">GATE STATUS:</span>
+              <strong className="text-[#ff4d4d]">{participantProfile.venueCheckIn ? 'GATE ENTRY CHECKED-IN ✓' : 'VERIFICATION PENDING'}</strong>
+            </div>
+
+            <Link
+              to="/participant/pass"
+              className="px-3.5 py-1.5 rounded-xl bg-[#1a0000] border border-[#dc2626]/70 hover:border-[#dc2626] text-xs font-mono flex items-center gap-2 text-white hover:text-[#ff4d4d] transition-all shadow-[0_0_15px_rgba(220,38,38,0.3)]"
+            >
+              <span className="text-[#ff2b2b]">⚡ PASS READY</span>
+            </Link>
+          </div>
+        </motion.div>
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10">
