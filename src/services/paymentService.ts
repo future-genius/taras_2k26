@@ -212,7 +212,12 @@ export async function verifyPayment(
     if (!regSnap.exists()) throw new Error('Registration record not found.');
 
     const regData = regSnap.data() as EventRegistration;
+    const partRef = doc(firestore, 'participants', regData.uid);
 
+    // Execute ALL reads before any writes
+    const partSnap = await transaction.get(partRef);
+
+    // Write 1: Update registration status
     transaction.update(regRef, {
       paymentStatus: 'VERIFIED',
       status: 'CONFIRMED',
@@ -221,9 +226,7 @@ export async function verifyPayment(
       updatedAt: serverTimestamp(),
     });
 
-    // Update participant registeredEvents if needed
-    const partRef = doc(firestore, 'participants', regData.uid);
-    const partSnap = await transaction.get(partRef);
+    // Write 2: Update participant registeredEvents if needed
     if (partSnap.exists()) {
       const pData = partSnap.data();
       const currentEvents = (pData.registeredEvents as string[]) || [];
