@@ -16,8 +16,8 @@ import { firestore, storage } from '../config/firebase';
 import type { EventRegistration, PaymentStatus } from '../types/registration';
 import type { RegistrationPaymentConfig } from '../types/registrationConfig';
 
-export const MAX_PAYMENT_PROOF_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB per registration
-export const MAX_PAYMENT_PROOF_SIZE_LABEL = '5 MB';
+export const MAX_PAYMENT_PROOF_SIZE_BYTES = 1048576; // 1 MB per registration
+export const MAX_PAYMENT_PROOF_SIZE_LABEL = '1 MB';
 
 const ALLOWED_IMAGE_MIME_TYPES = [
   'image/jpeg',
@@ -29,19 +29,19 @@ const ALLOWED_IMAGE_MIME_TYPES = [
 ];
 
 /**
- * Validate screenshot file type and size (5 MB max) before uploading
+ * Validate screenshot file type and size (1 MB max) before uploading
  */
 export function validatePaymentScreenshotFile(file: File): { valid: boolean; error?: string } {
   if (!file) {
     return { valid: false, error: 'No file selected. Please choose a screenshot.' };
   }
 
-  // 1. Enforce strict 5 MB limit
+  // 1. Enforce strict 1 MB limit
   if (file.size > MAX_PAYMENT_PROOF_SIZE_BYTES) {
     const sizeInMb = (file.size / (1024 * 1024)).toFixed(2);
     return {
       valid: false,
-      error: `Screenshot size (${sizeInMb} MB) exceeds the maximum 5 MB limit. Please select an image under 5 MB.`,
+      error: `Screenshot size (${sizeInMb} MB) exceeds the maximum 1 MB limit. Please select an image under 1 MB.`,
     };
   }
 

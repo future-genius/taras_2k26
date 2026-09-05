@@ -64,7 +64,7 @@ import {
   type QueryDocumentSnapshot,
 } from "firebase/firestore";
 import type { EventRegistration } from "../types/registration";
-import type { EventTeam, TeamJoinRequest } from "../types/team";
+import type { EventTeam, RegistrationTeamMember, TeamJoinRequest } from "../types/team";
 import type {
   EventCheckIn,
   Scorecard,
@@ -1149,9 +1149,7 @@ export async function runAtomicCreateTeam(
           uid,
           participantId,
           fullName,
-          email,
           college,
-          qrToken,
           isLeader: true,
         },
       ],
@@ -1170,6 +1168,20 @@ export async function runAtomicCreateTeam(
     transaction.set(teamRef, {
       ...newTeam,
       createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+
+    const codeRef = doc(firestore, 'team_codes', teamCode);
+    transaction.set(codeRef, {
+      teamId,
+      teamCode,
+      teamName: trimmedName,
+      leaderUid: uid,
+      memberCount,
+      currentMemberCount: 1,
+      maxTeamSize,
+      isLocked: false,
+      isFull: 1 >= memberCount,
       updatedAt: serverTimestamp(),
     });
 
@@ -1192,48 +1204,68 @@ export async function runAtomicRequestJoinTeam(
   fullName: string,
   email: string,
   college: string,
-  qrToken: string,
+  _qrToken: string | undefined,
   rawTeamCode: string
 ): Promise<{ request: TeamJoinRequest; teamName: string }> {
   const normalizedCode = rawTeamCode.trim().toUpperCase();
 
-  const q = query(collection(firestore, 'teams'), where('teamCode', '==', normalizedCode));
-  const querySnap = await getDocs(q);
+  const codeRef = doc(firestore, 'team_codes', normalizedCode);
+  const codeSnap = await firestoreGetDoc(codeRef);
 
-  if (querySnap.empty) {
-    throw new Error(`Team code "${normalizedCode}" not found. Please verify the code with your Team Leader.`);
-  }
+  let targetTeamId: string;
+  let targetTeamCode: string;
+  let targetTeamName: string;
+  let targetLeaderUid: string;
+  let currentMemberCount: number;
+  let targetMemberCount: number;
+  let targetMaxTeamSize: number;
+  let isLocked: boolean;
 
-  const teamDocRef = querySnap.docs[0].ref;
+  if (codeSnap.exists()) {
+    const codeData = codeSnap.data();
+    targetTeamId = codeData.teamId;
+    targetTeamCode = codeData.teamCode || normalizedCode;
+    targetTeamName = codeData.teamName;
+    targetLeaderUid = codeData.leaderUid;
+    currentMemberCount = codeData.currentMemberCount || 0;
+    targetMemberCount = codeData.memberCount || 10;
+    targetMaxTeamSize = codeData.maxTeamSize || 10;
+    isLocked = !!codeData.isLocked;
+  } else {
+    const q = query(collection(firestore, 'teams'), where('teamCode', '==', normalizedCode));
+    const querySnap = await getDocs(q);
 
-  return await runTransaction(firestore, async (transaction) => {
-    const teamSnap = await transaction.get(teamDocRef);
-    if (!teamSnap.exists()) {
-      throw new Error('Team not found.');
+    if (querySnap.empty) {
+      throw new Error(`Team code "${normalizedCode}" not found. Please verify the code with your Team Leader.`);
     }
 
-    const teamData = teamSnap.data() as EventTeam;
+    const legacyData = querySnap.docs[0].data() as EventTeam;
+    targetTeamId = legacyData.teamId;
+    targetTeamCode = legacyData.teamCode;
+    targetTeamName = legacyData.teamName;
+    targetLeaderUid = legacyData.leaderUid;
+    currentMemberCount = legacyData.members.length;
+    targetMemberCount = legacyData.memberCount;
+    targetMaxTeamSize = legacyData.maxTeamSize;
+    isLocked = !!legacyData.eventRegistrationStarted;
+  }
 
-    if (teamData.leaderUid === uid) {
+  return await runTransaction(firestore, async (transaction) => {
+    if (targetLeaderUid === uid) {
       throw new Error('You are the captain of this team.');
     }
 
-    if (teamData.memberUids.includes(uid)) {
-      throw new Error('You are already an approved member of this team.');
-    }
-
-    if (teamData.members.length >= teamData.maxTeamSize) {
-      throw new Error(`Team "${teamData.teamName}" is already full (max ${teamData.maxTeamSize} members).`);
-    }
-
-    // Check if team is locked (composition cannot change after event registration)
-    if (teamData.eventRegistrationStarted) {
+    if (isLocked) {
       throw new Error(
-        `Squad "${teamData.teamName}" has already registered for an event and is now locked. New members cannot join a locked squad.`
+        `Squad "${targetTeamName}" has already registered for an event and is now locked. New members cannot join a locked squad.`
       );
     }
 
-    const reqId = `REQ-${teamData.teamId}-${participantId}`;
+    if (currentMemberCount >= targetMaxTeamSize) {
+      throw new Error(`Team "${targetTeamName}" is already full (max ${targetMaxTeamSize} members).`);
+    }
+
+    const reqId = `REQ-${targetTeamId}-${participantId}`;
     const reqRef = doc(firestore, 'team_join_requests', reqId);
     const reqSnap = await transaction.get(reqRef);
     if (reqSnap.exists()) {
@@ -1249,15 +1281,13 @@ export async function runAtomicRequestJoinTeam(
     const now = new Date().toISOString();
     const newRequest: TeamJoinRequest = {
       requestId: reqId,
-      teamId: teamData.teamId,
-      teamCode: teamData.teamCode,
-      leaderUid: teamData.leaderUid,
+      teamId: targetTeamId,
+      teamCode: targetTeamCode,
+      leaderUid: targetLeaderUid,
       participantUid: uid,
       participantId,
       fullName,
-      email,
       college,
-      qrToken,
       status: 'PENDING',
       requestedAt: now,
     };
@@ -1268,7 +1298,7 @@ export async function runAtomicRequestJoinTeam(
       updatedAt: serverTimestamp(),
     });
 
-    return { request: newRequest, teamName: teamData.teamName };
+    return { request: newRequest, teamName: targetTeamName };
   });
 }
 
@@ -1347,18 +1377,19 @@ export async function runAtomicApproveJoinRequest(
 
     const now = new Date().toISOString();
     const updatedMemberUids = [...teamData.memberUids, reqData.participantUid];
-    const updatedMembers = [
-      ...teamData.members,
-      {
-        uid: reqData.participantUid,
-        participantId: reqData.participantId,
-        fullName: reqData.fullName,
-        email: reqData.email,
-        college: reqData.college,
-        qrToken: reqData.qrToken,
-        isLeader: false,
-      },
-    ];
+    const sanitizedExisting = teamData.members.map((m) => {
+      const { email, qrToken, ...rest } = m as any;
+      return rest as RegistrationTeamMember;
+    });
+
+    const newMember: RegistrationTeamMember = {
+      uid: reqData.participantUid,
+      participantId: reqData.participantId,
+      fullName: reqData.fullName,
+      college: reqData.college,
+      isLeader: false,
+    };
+    const updatedMembers = [...sanitizedExisting, newMember];
 
     const updatedTeam: EventTeam = {
       ...teamData,
@@ -1377,6 +1408,24 @@ export async function runAtomicApproveJoinRequest(
       status: updatedTeam.status,
       updatedAt: serverTimestamp(),
     });
+
+    const codeRef = doc(firestore, 'team_codes', teamData.teamCode);
+    transaction.set(
+      codeRef,
+      {
+        teamId: teamData.teamId,
+        teamCode: teamData.teamCode,
+        teamName: teamData.teamName,
+        leaderUid: teamData.leaderUid,
+        memberCount: teamData.memberCount,
+        currentMemberCount: updatedMembers.length,
+        maxTeamSize: teamData.maxTeamSize,
+        isLocked: teamData.eventRegistrationStarted || false,
+        isFull: updatedMembers.length >= teamData.memberCount,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
 
     transaction.update(partRef, {
       teamIds: updatedTeamIds,
@@ -1445,10 +1494,10 @@ export async function runAtomicJoinTeam(
   fullName: string,
   email: string,
   college: string,
-  qrToken: string,
+  _qrToken: string | undefined,
   rawTeamCode: string
 ): Promise<{ teamName: string }> {
-  const res = await runAtomicRequestJoinTeam(uid, participantId, fullName, email, college, qrToken, rawTeamCode);
+  const res = await runAtomicRequestJoinTeam(uid, participantId, fullName, email, college, _qrToken, rawTeamCode);
   throw new Error(`Join request sent to captain of "${res.teamName}". Membership will be confirmed once captain approves.`);
 }
 
@@ -2089,8 +2138,10 @@ export async function runAtomicIssueCertificate(
   const fullName = (partData.fullName as string) || "Participant";
   const college = (partData.college as string) || "Institution";
 
-  // Generate unique verification code
-  const randomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+  // Generate cryptographically secure unique verification code
+  const cryptoBytes = new Uint8Array(4);
+  (typeof crypto !== 'undefined' ? crypto : (window as any).crypto).getRandomValues(cryptoBytes);
+  const randomCode = Array.from(cryptoBytes, (b: number) => b.toString(16).padStart(2, '0')).join('').toUpperCase();
   const certId = `TARAS26-CERT-${randomCode}`;
   const certRef = doc(firestore, "certificate_records", certId);
   const now = new Date().toISOString();

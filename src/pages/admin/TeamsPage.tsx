@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../../config/firebase';
 import { AdminNav } from '../../components/layout/AdminNav';
 import { VisualAtmosphere } from '../../components/visual/VisualAtmosphere';
+import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
 import { Modal } from '../../components/common/Modal';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
@@ -18,12 +19,29 @@ export const TeamsPage: React.FC = () => {
   const [selectedTeam, setSelectedTeam] = useState<EventTeam | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const fetchTeams = async () => {
+  // Pagination State
+  const [currentPageIndex, setCurrentPageIndex] = useState(0);
+  const [snapshots, setSnapshots] = useState<any[]>([]);
+  const [hasMore, setHasMore] = useState(true);
+
+  const fetchTeams = async (snapToUse: any = null) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await db.getCollection('teams');
-      setTeams(data as unknown as EventTeam[]);
+      const res = await db.getPaginatedCollection('teams', 50, snapToUse);
+      const list = res.docs as unknown as EventTeam[];
+      setTeams(list);
+      setHasMore(res.hasMore);
+
+      if (res.lastSnapshot) {
+        if (!snapshots[currentPageIndex]) {
+          setSnapshots((prev) => {
+            const copy = [...prev];
+            copy[currentPageIndex] = res.lastSnapshot;
+            return copy;
+          });
+        }
+      }
     } catch (err: any) {
       console.error('Error fetching teams:', err);
       setError(err.message || 'Failed to load teams from Firestore.');
@@ -33,8 +51,28 @@ export const TeamsPage: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchTeams();
-  }, []);
+    setCurrentPageIndex(0);
+    setSnapshots([]);
+    fetchTeams(null);
+  }, [selectedEventFilter]);
+
+  const handleNextPage = () => {
+    const currentSnap = snapshots[currentPageIndex];
+    if (currentSnap && hasMore) {
+      const nextIdx = currentPageIndex + 1;
+      setCurrentPageIndex(nextIdx);
+      fetchTeams(currentSnap);
+    }
+  };
+
+  const handlePrevPage = () => {
+    if (currentPageIndex > 0) {
+      const prevIdx = currentPageIndex - 1;
+      setCurrentPageIndex(prevIdx);
+      const prevSnap = prevIdx > 0 ? snapshots[prevIdx - 1] : null;
+      fetchTeams(prevSnap);
+    }
+  };
 
   const filteredTeams = teams.filter((t) => {
     const matchesEvent = selectedEventFilter === 'ALL' || t.eventId === selectedEventFilter;
@@ -136,6 +174,31 @@ export const TeamsPage: React.FC = () => {
                 ))}
               </tbody>
             </table>
+
+            {/* Pagination Controls */}
+            <div className="flex items-center justify-between px-6 py-4 bg-[#0a0c10] border-t border-white/10 font-mono text-xs">
+              <span className="text-slate-400">
+                Page <strong className="text-white">{currentPageIndex + 1}</strong> (50 items per page)
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handlePrevPage}
+                  disabled={currentPageIndex === 0 || loading}
+                >
+                  Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleNextPage}
+                  disabled={!hasMore || loading}
+                >
+                  Next Page
+                </Button>
+              </div>
+            </div>
           </div>
         )}
 

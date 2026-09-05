@@ -306,17 +306,7 @@ export async function createEventRegistration(
       updatedAt: serverTimestamp(),
     });
 
-    // 2. Update participant's registeredEvents list
-    const partData = partSnap.data();
-    const registeredEvents = (partData.registeredEvents as string[]) || [];
-    if (!registeredEvents.includes(eventId)) {
-      transaction.update(participantRef, {
-        registeredEvents: [...registeredEvents, eventId],
-        updatedAt: serverTimestamp(),
-      });
-    }
-
-    // 3. Lock team composition if this is a team event
+    // 2. Lock team composition if this is a team event
     if (teamRef) {
       transaction.update(teamRef, {
         eventRegistrationStarted: true,

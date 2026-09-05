@@ -150,9 +150,7 @@ export async function createTeam(
     uid: leaderUid,
     participantId: leaderParticipantId,
     fullName: leaderFullName,
-    email: leaderEmail,
     college: leaderCollege,
-    qrToken: leaderQrToken,
     isLeader: true,
   };
 
@@ -174,6 +172,7 @@ export async function createTeam(
   };
 
   const teamRef = doc(firestore, 'teams', teamId);
+  const codeRef = doc(firestore, 'team_codes', teamCode);
   const partRef = doc(firestore, 'participants', leaderUid);
 
   await runTransaction(firestore, async (transaction) => {
@@ -187,6 +186,20 @@ export async function createTeam(
     transaction.set(teamRef, {
       ...newTeam,
       createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+
+    // Write minimal team_code projection document (non-PII)
+    transaction.set(codeRef, {
+      teamId,
+      teamCode,
+      teamName: trimmedName,
+      leaderUid,
+      memberCount,
+      currentMemberCount: 1,
+      maxTeamSize,
+      isLocked: false,
+      isFull: 1 >= memberCount,
       updatedAt: serverTimestamp(),
     });
 
@@ -220,6 +233,8 @@ export async function lockTeamComposition(teamId: string): Promise<void> {
         lockedAt: now,
         updatedAt: serverTimestamp(),
       });
+      const codeRef = doc(firestore, 'team_codes', data.teamCode);
+      transaction.set(codeRef, { isLocked: true, updatedAt: serverTimestamp() }, { merge: true });
     }
   });
 }
@@ -233,67 +248,102 @@ export async function requestToJoinTeam(
   fullName: string,
   email: string,
   college: string,
-  qrToken: string,
+  _qrToken: string | undefined,
   rawTeamCode: string
 ): Promise<TeamJoinRequest> {
   const normalizedCode = rawTeamCode.trim().toUpperCase();
   if (!normalizedCode) throw new Error('Please enter a valid team code.');
 
-  const teamsRef = collection(firestore, 'teams');
-  const q = query(teamsRef, where('teamCode', '==', normalizedCode));
-  const snap = await getDocs(q);
+  const codeRef = doc(firestore, 'team_codes', normalizedCode);
+  const codeSnap = await getDoc(codeRef);
 
-  if (snap.empty) {
-    throw new Error(`No squad found with team code "${normalizedCode}". Please verify the code and try again.`);
+  let targetTeamId: string;
+  let targetTeamCode: string;
+  let targetTeamName: string;
+  let targetLeaderUid: string;
+  let currentMemberCount: number;
+  let targetMemberCount: number;
+  let targetMaxTeamSize: number;
+  let isLocked: boolean;
+
+  if (codeSnap.exists()) {
+    const codeData = codeSnap.data();
+    targetTeamId = codeData.teamId;
+    targetTeamCode = codeData.teamCode || normalizedCode;
+    targetTeamName = codeData.teamName;
+    targetLeaderUid = codeData.leaderUid;
+    currentMemberCount = codeData.currentMemberCount || 0;
+    targetMemberCount = codeData.memberCount || 10;
+    targetMaxTeamSize = codeData.maxTeamSize || 10;
+    isLocked = !!codeData.isLocked;
+  } else {
+    // Fallback for pre-existing legacy teams before team_codes collection
+    const teamsRef = collection(firestore, 'teams');
+    const q = query(teamsRef, where('teamCode', '==', normalizedCode));
+    const snap = await getDocs(q);
+
+    if (snap.empty) {
+      throw new Error(`No squad found with team code "${normalizedCode}". Please verify the code and try again.`);
+    }
+
+    const teamData = snap.docs[0].data() as EventTeam;
+    targetTeamId = teamData.teamId;
+    targetTeamCode = teamData.teamCode;
+    targetTeamName = teamData.teamName;
+    targetLeaderUid = teamData.leaderUid;
+    currentMemberCount = teamData.members.length;
+    targetMemberCount = teamData.memberCount;
+    targetMaxTeamSize = teamData.maxTeamSize;
+    isLocked = !!teamData.eventRegistrationStarted;
+
+    if (teamData.memberUids.includes(participantUid)) {
+      throw new Error(`You are already a member of squad "${targetTeamName}".`);
+    }
   }
 
-  const teamData = snap.docs[0].data() as EventTeam;
-
-  if (teamData.memberUids.includes(participantUid)) {
-    throw new Error(`You are already a member of squad "${teamData.teamName}".`);
+  if (targetLeaderUid === participantUid) {
+    throw new Error(`You are already the captain of squad "${targetTeamName}".`);
   }
 
   // Block new join requests if team composition is locked
-  if (teamData.eventRegistrationStarted) {
+  if (isLocked) {
     throw new Error(
-      `Squad "${teamData.teamName}" has already registered for an event and is now locked. New members cannot join a locked squad.`
+      `Squad "${targetTeamName}" has already registered for an event and is now locked. New members cannot join a locked squad.`
     );
   }
 
-  if (teamData.members.length >= teamData.maxTeamSize) {
-    throw new Error(`Squad "${teamData.teamName}" is full (maximum ${teamData.maxTeamSize} members allowed).`);
+  if (currentMemberCount >= targetMaxTeamSize) {
+    throw new Error(`Squad "${targetTeamName}" is full (maximum ${targetMaxTeamSize} members allowed).`);
   }
 
   // Also check against the declared memberCount
-  if (teamData.members.length >= teamData.memberCount) {
+  if (currentMemberCount >= targetMemberCount) {
     throw new Error(
-      `Squad "${teamData.teamName}" has reached its declared member count of ${teamData.memberCount}. The team leader must update the squad to allow more members.`
+      `Squad "${targetTeamName}" has reached its declared member count of ${targetMemberCount}. The team leader must update the squad to allow more members.`
     );
   }
 
-  const requestId = `REQ-${teamData.teamId}-${participantId}`;
+  const requestId = `REQ-${targetTeamId}-${participantId}`;
   const reqRef = doc(firestore, 'team_join_requests', requestId);
   const reqSnap = await getDoc(reqRef);
 
   if (reqSnap.exists()) {
     const existing = reqSnap.data() as TeamJoinRequest;
     if (existing.status === 'PENDING') {
-      throw new Error(`You already have a pending join request for squad "${teamData.teamName}". Please wait for the team captain to review it.`);
+      throw new Error(`You already have a pending join request for squad "${targetTeamName}". Please wait for the team captain to review it.`);
     }
   }
 
   const now = new Date().toISOString();
   const joinReq: TeamJoinRequest = {
     requestId,
-    teamId: teamData.teamId,
-    teamCode: teamData.teamCode,
-    leaderUid: teamData.leaderUid,
+    teamId: targetTeamId,
+    teamCode: targetTeamCode,
+    leaderUid: targetLeaderUid,
     participantUid,
     participantId,
     fullName,
-    email,
     college,
-    qrToken,
     status: 'PENDING',
     requestedAt: now,
   };
@@ -380,21 +430,22 @@ export async function approveJoinRequest(
 
     const partRef = doc(firestore, 'participants', reqData.participantUid);
 
-    // ── 2. PREPARE MUTATIONS ──
+    // ── 2. PREPARE MUTATIONS (Strip email & qrToken from embedded member) ──
     const now = new Date().toISOString();
     const updatedMemberUids = [...teamData.memberUids, reqData.participantUid];
-    const updatedMembers = [
-      ...teamData.members,
-      {
-        uid: reqData.participantUid,
-        participantId: reqData.participantId,
-        fullName: reqData.fullName,
-        email: reqData.email,
-        college: reqData.college,
-        qrToken: reqData.qrToken,
-        isLeader: false,
-      },
-    ];
+    const sanitizedExistingMembers = teamData.members.map((m) => {
+      const { email, qrToken, ...rest } = m as any;
+      return rest as RegistrationTeamMember;
+    });
+
+    const newMember: RegistrationTeamMember = {
+      uid: reqData.participantUid,
+      participantId: reqData.participantId,
+      fullName: reqData.fullName,
+      college: reqData.college,
+      isLeader: false,
+    };
+    const updatedMembers = [...sanitizedExistingMembers, newMember];
 
     const updatedTeamStatus = updatedMembers.length >= teamData.minTeamSize ? 'CONFIRMED' : 'FORMING';
 
@@ -405,6 +456,24 @@ export async function approveJoinRequest(
       status: updatedTeamStatus,
       updatedAt: serverTimestamp(),
     });
+
+    const codeRef = doc(firestore, 'team_codes', teamData.teamCode);
+    transaction.set(
+      codeRef,
+      {
+        teamId: teamData.teamId,
+        teamCode: teamData.teamCode,
+        teamName: teamData.teamName,
+        leaderUid: teamData.leaderUid,
+        memberCount: teamData.memberCount,
+        currentMemberCount: updatedMembers.length,
+        maxTeamSize: teamData.maxTeamSize,
+        isLocked: teamData.eventRegistrationStarted || false,
+        isFull: updatedMembers.length >= teamData.memberCount,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
 
     transaction.update(partRef, {
       teamIds: arrayUnion(teamData.teamId),
@@ -488,6 +557,9 @@ export async function renameTeam(leaderUid: string, teamId: string, newTeamName:
     updatedAt: serverTimestamp(),
   });
 
+  const codeRef = doc(firestore, 'team_codes', teamData.teamCode);
+  batch.set(codeRef, { teamName: trimmed, updatedAt: serverTimestamp() }, { merge: true });
+
   await batch.commit();
 }
 
@@ -531,9 +603,14 @@ export async function removeMemberFromTeam(
     const reqRef = doc(firestore, 'team_join_requests', reqId);
     const reqSnap = await transaction.get(reqRef);
 
-    // ── 2. PREPARE MUTATIONS ──
+    // ── 2. PREPARE MUTATIONS (Strip email & qrToken) ──
     const updatedMemberUids = teamData.memberUids.filter((uid) => uid !== targetMemberUid);
-    const updatedMembers = teamData.members.filter((m) => m.uid !== targetMemberUid);
+    const updatedMembers = teamData.members
+      .filter((m) => m.uid !== targetMemberUid)
+      .map((m) => {
+        const { email, qrToken, ...rest } = m as any;
+        return rest as RegistrationTeamMember;
+      });
     const updatedStatus = updatedMembers.length >= teamData.minTeamSize ? 'CONFIRMED' : 'FORMING';
 
     // ── 3. EXECUTE WRITES ──
@@ -543,6 +620,17 @@ export async function removeMemberFromTeam(
       status: updatedStatus,
       updatedAt: serverTimestamp(),
     });
+
+    const codeRef = doc(firestore, 'team_codes', teamData.teamCode);
+    transaction.set(
+      codeRef,
+      {
+        currentMemberCount: updatedMembers.length,
+        isFull: updatedMembers.length >= teamData.memberCount,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
 
     transaction.update(partRef, {
       teamIds: arrayRemove(teamId),
@@ -598,7 +686,12 @@ export async function leaveTeam(memberUid: string, teamId: string): Promise<void
     const partSnap = await transaction.get(partRef);
 
     const updatedMemberUids = teamData.memberUids.filter((uid) => uid !== memberUid);
-    const updatedMembers = teamData.members.filter((m) => m.uid !== memberUid);
+    const updatedMembers = teamData.members
+      .filter((m) => m.uid !== memberUid)
+      .map((m) => {
+        const { email, qrToken, ...rest } = m as any;
+        return rest as RegistrationTeamMember;
+      });
     const updatedStatus = updatedMembers.length >= teamData.minTeamSize ? 'CONFIRMED' : 'FORMING';
 
     transaction.update(teamRef, {
@@ -607,6 +700,17 @@ export async function leaveTeam(memberUid: string, teamId: string): Promise<void
       status: updatedStatus,
       updatedAt: serverTimestamp(),
     });
+
+    const codeRef = doc(firestore, 'team_codes', teamData.teamCode);
+    transaction.set(
+      codeRef,
+      {
+        currentMemberCount: updatedMembers.length,
+        isFull: updatedMembers.length >= teamData.memberCount,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
 
     if (partSnap.exists()) {
       const pData = partSnap.data();
@@ -693,8 +797,10 @@ export async function deleteTeam(
       });
     });
 
-    // C. Delete team document last
+    // C. Delete team document and code projection document
     transaction.delete(teamRef);
+    const codeRef = doc(firestore, 'team_codes', teamData.teamCode);
+    transaction.delete(codeRef);
 
     return {
       success: true,

@@ -15,6 +15,8 @@
 
 import * as admin from 'firebase-admin';
 
+import * as crypto from 'crypto';
+
 export interface CertificateJobParams {
   jobId: string;
   eventId: string;
@@ -25,7 +27,7 @@ export interface CertificateJobParams {
 }
 
 export function generateCertCode(): string {
-  const chars = Math.random().toString(36).substring(2, 8).toUpperCase();
+  const chars = crypto.randomBytes(4).toString('hex').toUpperCase();
   return `TARAS26-CERT-${chars}`;
 }
 

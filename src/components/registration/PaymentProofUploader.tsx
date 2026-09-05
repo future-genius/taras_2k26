@@ -89,9 +89,9 @@ export const PaymentProofUploader = forwardRef<PaymentProofUploaderRef, PaymentP
     const processSelectedFile = async (file: File) => {
       if (!file) return;
 
-      // 1. Input limit check: 5 MB
+      // 1. Input limit check: 1 MB (1,048,576 bytes)
       if (file.size > MAX_INPUT_FILE_SIZE_BYTES) {
-        setErrorMessage('Payment screenshot must be 5 MB or smaller.');
+        setErrorMessage('Payment proof file must be 1 MB or smaller.');
         setState('error');
         return;
       }
@@ -241,7 +241,7 @@ export const PaymentProofUploader = forwardRef<PaymentProofUploaderRef, PaymentP
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/jpeg,image/jpg,image/png,image/webp"
+          accept="image/jpeg,image/jpg,image/png,image/webp,application/pdf"
           onChange={handleFileChange}
           disabled={disabled || state === 'uploading'}
           className="hidden"
@@ -267,7 +267,7 @@ export const PaymentProofUploader = forwardRef<PaymentProofUploaderRef, PaymentP
 
             <div>
               <span className="font-bold text-white text-xs block">
-                Select Payment Screenshot
+                Select Payment Proof File
               </span>
               <span className="text-[11px] text-slate-400 font-light block mt-0.5">
                 Drag &amp; drop or click to browse
@@ -276,10 +276,10 @@ export const PaymentProofUploader = forwardRef<PaymentProofUploaderRef, PaymentP
 
             <div className="flex items-center gap-2 pt-1 text-[10px] text-slate-400">
               <span className="px-2 py-0.5 rounded bg-white/5 border border-white/10">
-                Max 5 MB
+                Max 1 MB
               </span>
               <span>•</span>
-              <span className="text-slate-300">JPG, PNG, WebP</span>
+              <span className="text-slate-300">JPG, PNG, PDF</span>
               <span>•</span>
               <span className="text-[#dc2626] font-bold">Auto-Optimized</span>
             </div>

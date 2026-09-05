@@ -10,6 +10,7 @@
  */
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { auth } from './firebase';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
@@ -40,6 +41,17 @@ if (isSupabaseConfigured) {
       persistSession: false,
       autoRefreshToken: false,
       detectSessionInUrl: false,
+    },
+    accessToken: async () => {
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        return null;
+      }
+      try {
+        return await currentUser.getIdToken();
+      } catch {
+        return null;
+      }
     },
   });
 } else {

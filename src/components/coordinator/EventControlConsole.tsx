@@ -110,21 +110,32 @@ export const EventControlConsole: React.FC<EventControlConsoleProps> = ({ event,
     try {
       // Find all registrations for this event
       const regs = await db.queryWhere('registrations', 'eventId', event.id);
-      const items: ParticipantRegistrationItem[] = [];
 
       // Fetch teams for team events
       const teamsData = await db.queryWhere('teams', 'eventId', event.id);
       const teams: TeamItem[] = (teamsData as unknown as TeamItem[]) || [];
       setEventTeams(teams);
 
-      for (const r of regs) {
+      // Concurrently resolve participant profiles in parallel to avoid sequential N+1 roundtrips
+      const participantDocs = await Promise.all(
+        regs.map(async (r) => {
+          const uid = r.uid as string;
+          try {
+            const pDoc = await db.getDoc('participants', uid);
+            return { reg: r, pDoc };
+          } catch {
+            return { reg: r, pDoc: { exists: false, data: {} } };
+          }
+        })
+      );
+
+      const items: ParticipantRegistrationItem[] = participantDocs.map(({ reg: r, pDoc }) => {
         const uid = r.uid as string;
-        const pDoc = await db.getDoc('participants', uid);
         const pData = (pDoc.data as Record<string, unknown>) || {};
         const attMap = (pData.attendanceStatus as Record<string, string>) || {};
         const shortMap = (pData.shortlistStatus as Record<string, string>) || {};
 
-        items.push({
+        return {
           id: uid,
           participantId: (r.participantId as string) || (pData.participantId as string) || 'N/A',
           fullName: (pData.fullName as string) || (r.participantId as string) || 'Participant',
@@ -135,8 +146,8 @@ export const EventControlConsole: React.FC<EventControlConsoleProps> = ({ event,
           venueCheckIn: pData.venueCheckIn === true || pData.venueCheckInStatus === 'CHECKED_IN',
           eventAttendance: (attMap[event.id] as any) || (r.eventAttendance as any) || 'NOT_MARKED',
           shortlistStatus: (shortMap[event.id] as any) || (r.shortlistStatus as any) || 'NOT_EVALUATED',
-        });
-      }
+        };
+      });
 
       setRegisteredParticipants(items);
 
@@ -392,13 +403,28 @@ export const EventControlConsole: React.FC<EventControlConsoleProps> = ({ event,
 
     try {
       const res = await runAtomicEventCheckIn(event.id, event.name, clean, coordinatorUid, selectedRound);
+      const targetUid = res.checkIn?.uid || (res.participant?.uid as string);
+      const targetParticipantId = (res.participant?.participantId as string) || '';
+
       if (res.isAlreadyCheckedIn) {
         setCheckInSuccess(`[ALREADY CHECKED IN] ${res.participant.fullName as string} (${res.participant.participantId as string}) is already marked PRESENT for ${event.name}.`);
       } else {
         setCheckInSuccess(`[SUCCESS] Event Hall Check-In recorded for ${res.participant.fullName as string} (${res.participant.participantId as string}). Attendance marked PRESENT.`);
       }
       setScanInput('');
-      fetchParticipantsAndScores();
+
+      // Targeted local React state update: update only affected row without reloading entire event dataset
+      setRegisteredParticipants((prev) =>
+        prev.map((p) => {
+          if (p.id === targetUid || (targetParticipantId && p.participantId === targetParticipantId)) {
+            return {
+              ...p,
+              eventAttendance: 'PRESENT',
+            };
+          }
+          return p;
+        })
+      );
     } catch (err: unknown) {
       setCheckInError(err instanceof Error ? err.message : 'Event check-in failed.');
     } finally {
@@ -417,7 +443,10 @@ export const EventControlConsole: React.FC<EventControlConsoleProps> = ({ event,
   const handleAttendanceChange = async (targetUid: string, newStatus: 'NOT_MARKED' | 'PRESENT' | 'ABSENT') => {
     try {
       await runAtomicUpdateAttendance(event.id, event.name, targetUid, newStatus, selectedRound, coordinatorUid, 'coordinator');
-      fetchParticipantsAndScores();
+      // Update only affected row in local state
+      setRegisteredParticipants((prev) =>
+        prev.map((p) => (p.id === targetUid ? { ...p, eventAttendance: newStatus } : p))
+      );
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : 'Failed to update attendance');
     }
@@ -427,7 +456,12 @@ export const EventControlConsole: React.FC<EventControlConsoleProps> = ({ event,
   const handleShortlistChange = async (targetId: string, newStatus: 'NOT_EVALUATED' | 'SHORTLISTED' | 'NOT_SHORTLISTED' | 'FINALIST') => {
     try {
       await runAtomicUpdateShortlist(event.id, event.name, targetId, newStatus, coordinatorUid, 'coordinator');
-      fetchParticipantsAndScores();
+      // Update only affected row/team in local state
+      setRegisteredParticipants((prev) =>
+        prev.map((p) =>
+          p.id === targetId || p.teamId === targetId ? { ...p, shortlistStatus: newStatus } : p
+        )
+      );
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : 'Failed to update shortlist status');
     }
@@ -467,7 +501,9 @@ export const EventControlConsole: React.FC<EventControlConsoleProps> = ({ event,
       });
 
       setScoreSuccess(`Scorecard successfully submitted & locked for "${selectedTargetName}". Total Score: ${totalScore}/100.`);
-      fetchParticipantsAndScores();
+      // Bounded reload: update only scorecards without re-fetching all participants and teams
+      const updatedScores = await db.queryWhere('scorecards', 'eventId', event.id);
+      setScorecards((updatedScores as unknown as Scorecard[]) || []);
     } catch (err: unknown) {
       setScoreError(err instanceof Error ? err.message : 'Failed to submit scorecard.');
     } finally {

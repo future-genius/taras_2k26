@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../../config/firebase';
 import { AdminNav } from '../../components/layout/AdminNav';
 import { VisualAtmosphere } from '../../components/visual/VisualAtmosphere';
+import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import { MOCK_EVENTS } from '../../data/events';
@@ -28,14 +29,38 @@ export const RegistrationsPage: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [typeFilter, setTypeFilter] = useState('ALL');
 
-  const fetchRegistrations = async () => {
+  // Pagination State
+  const [currentPageIndex, setCurrentPageIndex] = useState(0);
+  const [snapshots, setSnapshots] = useState<any[]>([]);
+  const [hasMore, setHasMore] = useState(true);
+
+  const fetchRegistrations = async (snapToUse: any = null) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await db.getCollection('registrations');
-      const list = data as unknown as EventRegistration[];
+      let res;
+      if (eventFilter !== 'ALL') {
+        res = await db.queryWherePaginated('registrations', 'eventId', eventFilter, 50, snapToUse);
+      } else if (statusFilter !== 'ALL') {
+        res = await db.queryWherePaginated('registrations', 'status', statusFilter, 50, snapToUse);
+      } else {
+        res = await db.getPaginatedCollection('registrations', 50, snapToUse);
+      }
+
+      const list = res.docs as unknown as EventRegistration[];
       setRegistrations(list);
       setFilteredRegs(list);
+      setHasMore(res.hasMore);
+
+      if (res.lastSnapshot) {
+        if (!snapshots[currentPageIndex]) {
+          setSnapshots((prev) => {
+            const copy = [...prev];
+            copy[currentPageIndex] = res.lastSnapshot;
+            return copy;
+          });
+        }
+      }
     } catch (err: any) {
       console.error('Error fetching registrations:', err);
       setError(err.message || 'Failed to load registrations from Firestore.');
@@ -45,8 +70,28 @@ export const RegistrationsPage: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchRegistrations();
-  }, []);
+    setCurrentPageIndex(0);
+    setSnapshots([]);
+    fetchRegistrations(null);
+  }, [eventFilter, statusFilter]);
+
+  const handleNextPage = () => {
+    const currentSnap = snapshots[currentPageIndex];
+    if (currentSnap && hasMore) {
+      const nextIdx = currentPageIndex + 1;
+      setCurrentPageIndex(nextIdx);
+      fetchRegistrations(currentSnap);
+    }
+  };
+
+  const handlePrevPage = () => {
+    if (currentPageIndex > 0) {
+      const prevIdx = currentPageIndex - 1;
+      setCurrentPageIndex(prevIdx);
+      const prevSnap = prevIdx > 0 ? snapshots[prevIdx - 1] : null;
+      fetchRegistrations(prevSnap);
+    }
+  };
 
   useEffect(() => {
     let result = [...registrations];
@@ -219,6 +264,31 @@ export const RegistrationsPage: React.FC = () => {
                 ))}
               </tbody>
             </table>
+
+            {/* Pagination Controls */}
+            <div className="flex items-center justify-between px-6 py-4 bg-[#0a0c10] border-t border-white/10 font-mono text-xs">
+              <span className="text-slate-400">
+                Page <strong className="text-white">{currentPageIndex + 1}</strong> (50 items per page)
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handlePrevPage}
+                  disabled={currentPageIndex === 0 || loading}
+                >
+                  Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleNextPage}
+                  disabled={!hasMore || loading}
+                >
+                  Next Page
+                </Button>
+              </div>
+            </div>
           </div>
         )}
       </div>

@@ -6,10 +6,9 @@ export interface RegistrationTeamMember {
   uid: string;
   participantId: string;
   fullName: string;
-  email: string;
   college: string;
-  qrToken: string;
   isLeader: boolean;
+  email?: string;
 }
 
 export interface EventTeam {
@@ -66,9 +65,8 @@ export interface TeamJoinRequest {
   participantUid: string;
   participantId: string;
   fullName: string;
-  email: string;
+  email?: string;
   college: string;
-  qrToken: string;
   status: TeamJoinRequestStatus;
   requestedAt: string;
   reviewedAt?: string;

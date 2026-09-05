@@ -51,8 +51,12 @@ export async function generateUniqueCertificateId(): Promise<string> {
       const bytes = new Uint8Array(5);
       crypto.getRandomValues(bytes);
       hexCode = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('').toUpperCase();
+    } else if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      hexCode = crypto.randomUUID().replace(/-/g, '').substring(0, 10).toUpperCase();
     } else {
-      hexCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+      const bytes = new Uint8Array(5);
+      (window.crypto || crypto).getRandomValues(bytes);
+      hexCode = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('').toUpperCase();
     }
 
     certId = `TARAS26-CERT-${hexCode}`;

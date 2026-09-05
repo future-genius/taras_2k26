@@ -106,8 +106,9 @@ service cloud.firestore {
     // ─────────────────────────────────────────────────────────────────────────
 
     match /participants/{userId} {
-      // Read: Any authenticated user can read participant profiles (needed for squad roster, teammate lookup, certificates)
-      allow read: if isAuthenticated();
+      // Read: Users can read their own profile; staff, coordinators, and admins can read operational profiles.
+      // Arbitrary participant enumeration/scraping by unrelated participants is blocked.
+      allow read: if isOwner(userId) || isStaff() || isCoordinator() || isAdmin();
 
       // Create: Authenticated users can create ONLY their own profile with default security state.
       // NEVER allowed to self-create as super_admin.
@@ -117,14 +118,11 @@ service cloud.firestore {
         (
           !('role' in request.resource.data) ||
           request.resource.data.role == 'participant' ||
-          request.resource.data.role == 'PARTICIPANT' ||
-          (request.auth.token.email == 'registration.demo@taras2k26.test' && request.resource.data.role == 'registration_staff') ||
-          (request.auth.token.email == 'eventhead.demo@taras2k26.test' && (request.resource.data.role == 'coordinator' || request.resource.data.role == 'EVENT_HEAD'))
+          request.resource.data.role == 'PARTICIPANT'
         ) &&
         (
           !('assignedEventIds' in request.resource.data) ||
-          request.resource.data.assignedEventIds.size() == 0 ||
-          request.auth.token.email == 'eventhead.demo@taras2k26.test'
+          request.resource.data.assignedEventIds.size() == 0
         ) &&
         // Explicitly forbid isPrimarySuperAdmin from being set by self
         !('isPrimarySuperAdmin' in request.resource.data)
@@ -147,7 +145,7 @@ service cloud.firestore {
       //   (bio, registeredEvents, teamIds, updatedAt) without being able to alter security roles,
       //   check-in status, certificate status, tokens, or primary admin status.
       allow update: if
-        // RULE 1: Owner (or demo participant) updating non-security fields (bio, registeredEvents, teamIds, updatedAt)
+        // RULE 1: Owner (or demo participant) updating non-security profile fields
         // Evaluated FIRST so no circular or cross-document get() reads occur for normal participants
         (isAuthenticated() &&
          (isOwner(userId) || userId == 'taras_demo_participant_001') &&
@@ -157,13 +155,22 @@ service cloud.firestore {
            'venueCheckIn',
            'venueCheckInStatus',
            'venueCheckInTimestamp',
+           'checkedInByStaffUid',
            'certificateStatus',
            'certificateUrl',
+           'certificateEligible',
            'assignedEventIds',
            'attendanceStatus',
            'shortlistStatus',
            'participantId',
-           'qrToken'
+           'qrToken',
+           'registeredEvents',
+           'paymentStatus',
+           'paymentVerifiedAt',
+           'paymentVerifiedBy',
+           'paymentRejectedAt',
+           'paymentRejectedBy',
+           'teamIds'
          ]))
 
         // RULE A: super_admin has full update authority
@@ -175,20 +182,30 @@ service cloud.firestore {
             !isAttemptingToBecomeSuperAdmin() &&
             !('isPrimarySuperAdmin' in request.resource.data))
 
-        // RULE C: staff can update venue check-in status
+        // RULE C: staff can update venue check-in status and payment-verified registeredEvents
         || (isStaff() &&
             !isAdmin() &&
             request.resource.data.diff(resource.data).affectedKeys()
-              .hasOnly(['venueCheckIn', 'venueCheckInStatus', 'venueCheckInTimestamp', 'checkedInByStaffUid', 'updatedAt']))
+              .hasOnly(['venueCheckIn', 'venueCheckInStatus', 'venueCheckInTimestamp', 'checkedInByStaffUid', 'registeredEvents', 'updatedAt']))
 
-        // RULE D: coordinator can update attendance and shortlist
+        // RULE D: coordinator can update attendance and shortlist for assigned events ONLY
         || (isCoordinator() &&
             !isAdmin() &&
             request.resource.data.diff(resource.data).affectedKeys()
-              .hasOnly(['attendanceStatus', 'shortlistStatus', 'updatedAt']))
-
-        // RULE F: Isolated demo provision updates
-        || (isOwner(userId) && request.auth.token.email in ['registration.demo@taras2k26.test', 'eventhead.demo@taras2k26.test']);
+              .hasOnly(['attendanceStatus', 'shortlistStatus', 'updatedAt']) &&
+            ('assignedEventIds' in getCallerProfile()) &&
+            (
+              !('attendanceStatus' in request.resource.data) ||
+              resource == null ||
+              !('attendanceStatus' in resource.data) ||
+              getCallerProfile().assignedEventIds.hasAll(request.resource.data.attendanceStatus.diff(resource.data.attendanceStatus).affectedKeys())
+            ) &&
+            (
+              !('shortlistStatus' in request.resource.data) ||
+              resource == null ||
+              !('shortlistStatus' in resource.data) ||
+              getCallerProfile().assignedEventIds.hasAll(request.resource.data.shortlistStatus.diff(resource.data.shortlistStatus).affectedKeys())
+            ));
 
       // Delete: Only super_admin can delete a super_admin profile.
       // Admin can delete non-super_admin profiles.
@@ -201,32 +218,71 @@ service cloud.firestore {
     // ─────────────────────────────────────────────────────────────────────────
 
     match /registrations/{registrationId} {
-      // Read: Any authenticated user can read registrations
-      allow read: if isAuthenticated();
+      // Read: Participant owner, staff, event coordinator, or admin only.
+      // Unrelated participants CANNOT read registration documents or payment details.
+      allow read: if isAuthenticated() && (
+        resource.data.uid == request.auth.uid ||
+        isStaff() ||
+        (isCoordinator() && isCoordinatorForEvent(resource.data.eventId)) ||
+        isAdmin()
+      );
 
       // Create: Participant can create their own registration in PENDING/PENDING_PAYMENT status.
+      // Strictly FORBIDS self-creating with status = CONFIRMED, VERIFIED, or unauthorized NOT_REQUIRED.
       allow create: if isAuthenticated() &&
         (
           request.resource.data.uid == request.auth.uid ||
           request.resource.data.uid == 'taras_demo_participant_001' ||
-          isAdmin()
+          isAdmin() || isStaff()
         ) &&
         (
-          !('paymentStatus' in request.resource.data) ||
-          request.resource.data.paymentStatus == 'PENDING' ||
-          request.resource.data.paymentStatus == 'NOT_REQUIRED'
-        ) &&
-        (
-          !('status' in request.resource.data) ||
-          request.resource.data.status == 'PENDING' ||
-          request.resource.data.status == 'PENDING_PAYMENT' ||
-          request.resource.data.status == 'PAYMENT_VERIFICATION_PENDING' ||
-          request.resource.data.status == 'CONFIRMED'
-        ) &&
-        !('paymentVerifiedBy' in request.resource.data) &&
-        !('paymentVerifiedAt' in request.resource.data) &&
-        // Participants cannot self-assign fee verification fields
-        !('paymentRejectedBy' in request.resource.data);
+          isAdmin() || isStaff() ||
+          (
+            (
+              // Case 1: Paid Event Registration (Must start as PENDING or PENDING_PAYMENT)
+              (
+                (
+                  !('status' in request.resource.data) ||
+                  request.resource.data.status == 'PENDING' ||
+                  request.resource.data.status == 'PENDING_PAYMENT'
+                ) &&
+                (
+                  !('paymentStatus' in request.resource.data) ||
+                  request.resource.data.paymentStatus == 'PENDING' ||
+                  request.resource.data.paymentStatus == 'PENDING_PAYMENT'
+                )
+              )
+              ||
+              // Case 2: Confirmed Free Event Registration (Requires verified fee == 0 event in Firestore)
+              (
+                request.resource.data.status == 'CONFIRMED' &&
+                request.resource.data.paymentStatus == 'NOT_REQUIRED' &&
+                'eventId' in request.resource.data &&
+                exists(/databases/$(database)/documents/events/$(request.resource.data.eventId)) &&
+                (
+                  get(/databases/$(database)/documents/events/$(request.resource.data.eventId)).data.fee == 0 ||
+                  get(/databases/$(database)/documents/events/$(request.resource.data.eventId)).data.isFree == true
+                )
+              )
+            ) &&
+            !('paymentVerifiedBy' in request.resource.data) &&
+            !('paymentVerifiedAt' in request.resource.data) &&
+            !('paymentRejectedBy' in request.resource.data) &&
+            !('paymentRejectedAt' in request.resource.data) &&
+            (
+              !('certificateEligible' in request.resource.data) ||
+              request.resource.data.certificateEligible == false
+            ) &&
+            (
+              !('eventAttendance' in request.resource.data) ||
+              request.resource.data.eventAttendance == 'NOT_MARKED'
+            ) &&
+            (
+              !('shortlistStatus' in request.resource.data) ||
+              request.resource.data.shortlistStatus == 'NOT_EVALUATED'
+            )
+          )
+        );
 
       // Update:
       // A. Staff / Registration Staff / Admin: Can perform payment verification and rejection
@@ -256,8 +312,17 @@ service cloud.firestore {
         request.resource.data.status != 'CONFIRMED'
       );
 
-      // Delete: Admin or participant deleting their own registration
-      allow delete: if isAdmin() || (isAuthenticated() && (resource.data.uid == request.auth.uid || resource.data.uid == 'taras_demo_participant_001'));
+      // Delete: Admin, or participant deleting their own safe unsubmitted/pending registration (PENDING or PENDING_PAYMENT)
+      // Strictly FORBIDS self-deletion once a UTR, payment proof submission, or verification has occurred.
+      allow delete: if isAdmin() || (
+        isAuthenticated() &&
+        (resource.data.uid == request.auth.uid || resource.data.uid == 'taras_demo_participant_001') &&
+        (resource.data.status == 'PENDING' || resource.data.status == 'PENDING_PAYMENT') &&
+        (!('paymentStatus' in resource.data) || resource.data.paymentStatus == 'PENDING') &&
+        !('paymentVerifiedBy' in resource.data) &&
+        !('utrNumber' in resource.data) &&
+        !('paymentSubmittedAt' in resource.data)
+      );
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -265,32 +330,89 @@ service cloud.firestore {
     // ─────────────────────────────────────────────────────────────────────────
 
     match /teams/{teamId} {
-      allow read: if isAuthenticated();
+      // Get: Restrict single team document lookup to squad members, team leader, staff, coordinators, and admins.
+      allow get: if isAuthenticated() && (
+        resource.data.leaderUid == request.auth.uid ||
+        request.auth.uid in resource.data.memberUids ||
+        isStaff() ||
+        isCoordinator() ||
+        isAdmin()
+      );
 
-      // Create: Any authenticated participant can create a team.
-      // Teams are event-independent — no eventId required at creation.
-      allow create: if isAuthenticated();
+      // List: Restrict collection queries to team leader, squad members, staff, coordinators, and admins.
+      // Arbitrary collection listing/scraping by unrelated participants is blocked.
+      allow list: if isAuthenticated() && (
+        resource.data.leaderUid == request.auth.uid ||
+        request.auth.uid in resource.data.memberUids ||
+        isStaff() ||
+        isCoordinator() ||
+        isAdmin()
+      );
 
-      // Update: Team leader (or member locking during registration) or Admin can update.
-      // CRITICAL: Once eventRegistrationStarted=true, composition fields
-      // (memberUids, members, memberCount) are LOCKED — only admin can change them.
-      allow update: if (
-        isAuthenticated() &&
+      // Create: Authenticated participant creating squad as leader with themselves as initial member
+      allow create: if isAuthenticated() && (
+        isAdmin() ||
         (
-          resource.data.leaderUid == request.auth.uid ||
-          resource.data.leaderUid == 'taras_demo_participant_001' ||
-          (request.auth.uid in resource.data.memberUids)
-        ) &&
-        (
-          // If NOT locked: all updates by leader/members are allowed
-          !('eventRegistrationStarted' in resource.data) ||
-          resource.data.eventRegistrationStarted != true ||
-          // If locked: only non-composition fields can be updated
-          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-            'memberUids', 'members', 'memberCount'
-          ])
+          request.resource.data.leaderUid == request.auth.uid &&
+          request.resource.data.memberUids.size() == 1 &&
+          request.resource.data.memberUids[0] == request.auth.uid &&
+          request.resource.data.memberCount >= 1 &&
+          request.resource.data.memberCount <= 10 &&
+          (!('eventRegistrationStarted' in request.resource.data) || request.resource.data.eventRegistrationStarted == false)
         )
-      ) || isAdmin();
+      );
+
+      // Update:
+      // A. Admin has full update authority
+      // B. Team Leader:
+      //    - Protected fields (teamId, teamCode, leaderUid, leaderParticipantId, memberCount) are strictly IMMUTABLE.
+      //    - When unlocked: may update composition up to declared memberCount.
+      //    - When locked: composition fields (members, memberUids, memberCount, status) are locked.
+      // C. Non-leader member:
+      //    - Can ONLY update to voluntarily LEAVE the squad before locking.
+      //    - Cannot modify leaderUid, memberCount, teamCode, or other members.
+      allow update: if isAdmin() || (
+        isAuthenticated() &&
+        // Strict immutability of core structural fields for all participant writes
+        request.resource.data.teamId == resource.data.teamId &&
+        request.resource.data.teamCode == resource.data.teamCode &&
+        request.resource.data.leaderUid == resource.data.leaderUid &&
+        request.resource.data.leaderParticipantId == resource.data.leaderParticipantId &&
+        request.resource.data.memberCount == resource.data.memberCount &&
+        (!('eventId' in resource.data) || request.resource.data.eventId == resource.data.eventId) &&
+        (!('createdBy' in resource.data) || request.resource.data.createdBy == resource.data.createdBy) &&
+        (
+          // CASE 1: Team Leader updating
+          (
+            (resource.data.leaderUid == request.auth.uid || resource.data.leaderUid == 'taras_demo_participant_001') &&
+            (
+              // If NOT locked: leader can update composition up to declared memberCount
+              (
+                (!('eventRegistrationStarted' in resource.data) || resource.data.eventRegistrationStarted != true) &&
+                request.resource.data.memberUids.size() <= resource.data.memberCount &&
+                request.resource.data.memberUids.hasAll([resource.data.leaderUid])
+              ) ||
+              // If locked: composition fields cannot be altered
+              (
+                resource.data.eventRegistrationStarted == true &&
+                !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+                  'memberUids', 'members', 'memberCount', 'status'
+                ])
+              )
+            )
+          )
+          ||
+          // CASE 2: Non-leader squad member voluntarily leaving unlocked squad
+          (
+            request.auth.uid in resource.data.memberUids &&
+            request.auth.uid != resource.data.leaderUid &&
+            (!('eventRegistrationStarted' in resource.data) || resource.data.eventRegistrationStarted != true) &&
+            !(request.auth.uid in request.resource.data.memberUids) &&
+            request.resource.data.memberUids.size() == resource.data.memberUids.size() - 1 &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUids', 'members', 'status', 'updatedAt'])
+          )
+        )
+      );
 
       // Delete: Admin can delete any team. Leader can delete their own (non-locked) team.
       allow delete: if isAdmin() || (
@@ -301,14 +423,96 @@ service cloud.firestore {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // 3.0. Team Codes Projection (/team_codes/{teamCode})
+    // ─────────────────────────────────────────────────────────────────────────
+
+    match /team_codes/{teamCode} {
+      // Public validation of team code before joining (contains NO member PII, emails, or QR tokens)
+      allow read: if isAuthenticated();
+
+      // Only team leader creating the squad, staff, or admin can create projection
+      allow create: if isAuthenticated() && (
+        request.resource.data.leaderUid == request.auth.uid ||
+        isStaff() ||
+        isAdmin()
+      );
+
+      // Only team leader, team members, staff, coordinators, or admin can update projection
+      allow update: if isAuthenticated() && (
+        resource.data.leaderUid == request.auth.uid ||
+        (
+          resource.data.teamId != null &&
+          exists(/databases/$(database)/documents/teams/$(resource.data.teamId)) &&
+          request.auth.uid in get(/databases/$(database)/documents/teams/$(resource.data.teamId)).data.memberUids
+        ) ||
+        isStaff() ||
+        isCoordinator() ||
+        isAdmin()
+      );
+
+      // Only team leader or admin can delete projection
+      allow delete: if isAuthenticated() && (
+        resource.data.leaderUid == request.auth.uid ||
+        isAdmin()
+      );
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // 3.1. Team Join Requests (/team_join_requests/{requestId})
     // ─────────────────────────────────────────────────────────────────────────
 
     match /team_join_requests/{requestId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
-      allow update: if isAuthenticated();
-      allow delete: if isAuthenticated();
+      // Read: Request creator, team leader, or admin
+      allow read: if isAuthenticated() && (
+        resource.data.participantUid == request.auth.uid ||
+        resource.data.leaderUid == request.auth.uid ||
+        isAdmin()
+      );
+
+      // Create: Request creator only, must start in PENDING status.
+      // Sensitive data (qrToken) is STRICTLY PROHIBITED in join requests.
+      allow create: if isAuthenticated() &&
+        request.resource.data.participantUid == request.auth.uid &&
+        request.resource.data.status == 'PENDING' &&
+        !('qrToken' in request.resource.data);
+
+      // Update: Team Leader updating status to APPROVED or REJECTED (without altering teamId, requesterId, etc.) or Admin
+      allow update: if (
+        isAuthenticated() &&
+        resource.data.leaderUid == request.auth.uid &&
+        (request.resource.data.status == 'APPROVED' || request.resource.data.status == 'REJECTED') &&
+        !('qrToken' in request.resource.data) &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'teamId', 'teamCode', 'leaderUid', 'participantUid', 'participantId', 'fullName', 'email', 'college', 'qrToken', 'requestedAt'
+        ])
+      ) || isAdmin();
+
+      // Delete: Request creator, team leader, or admin
+      allow delete: if isAuthenticated() && (
+        resource.data.participantUid == request.auth.uid ||
+        resource.data.leaderUid == request.auth.uid ||
+        isAdmin()
+      );
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 3.2. UTR Uniqueness Registry (/utr_registry/{utr})
+    // ─────────────────────────────────────────────────────────────────────────
+
+    match /utr_registry/{utr} {
+      allow read: if isStaff() || isAdmin();
+      // Only authenticated user owning a valid existing registration can register UTR
+      allow create: if isAuthenticated() &&
+        request.resource.data.uid == request.auth.uid &&
+        'registrationId' in request.resource.data &&
+        exists(/databases/$(database)/documents/registrations/$(request.resource.data.registrationId)) &&
+        get(/databases/$(database)/documents/registrations/$(request.resource.data.registrationId)).data.uid == request.auth.uid;
+      // Update: only allowed for the same registration by the same owner (e.g. resubmissions)
+      allow update: if isAuthenticated() &&
+        resource.data.uid == request.auth.uid &&
+        request.resource.data.uid == request.auth.uid &&
+        request.resource.data.registrationId == resource.data.registrationId;
+      allow delete: if isAdmin();
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -325,7 +529,8 @@ service cloud.firestore {
 
       allow create: if isAdmin() || (
         isCoordinator() &&
-        isCoordinatorForEvent(request.resource.data.eventId)
+        isCoordinatorForEvent(request.resource.data.eventId) &&
+        (!('checkedInByUid' in request.resource.data) || request.resource.data.checkedInByUid == request.auth.uid)
       );
 
       allow update, delete: if isAdmin();
@@ -343,13 +548,15 @@ service cloud.firestore {
 
       allow create: if isAdmin() || (
         isCoordinator() &&
-        isCoordinatorForEvent(request.resource.data.eventId)
+        isCoordinatorForEvent(request.resource.data.eventId) &&
+        (!('judgeUid' in request.resource.data) || request.resource.data.judgeUid == request.auth.uid)
       );
 
       allow update: if isAdmin() || (
         isCoordinator() &&
         isCoordinatorForEvent(resource.data.eventId) &&
-        resource.data.status != 'SUBMITTED'
+        resource.data.status != 'SUBMITTED' &&
+        (!('judgeUid' in request.resource.data) || request.resource.data.judgeUid == request.auth.uid)
       );
 
       allow delete: if isAdmin();
@@ -369,19 +576,6 @@ service cloud.firestore {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // 7. Certificate Records (/certificate_records/{certId})
-    // ─────────────────────────────────────────────────────────────────────────
-
-    match /certificate_records/{certId} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-
-    match /email_logs/{emailJobId} {
-      allow read, write: if isAdmin();
-    }
-
-    // ─────────────────────────────────────────────────────────────────────────
     // 8. Audit Trail (/audit_logs/{logId})
     // IMMUTABLE: update and delete are STRICTLY FORBIDDEN.
     // ─────────────────────────────────────────────────────────────────────────
@@ -390,8 +584,11 @@ service cloud.firestore {
       // Read: Admin and super_admin
       allow read: if isAdmin();
 
-      // Create: Any authenticated operational role
-      allow create: if isAuthenticated();
+      // Create: Authorized operational roles ONLY (staff, coordinator, admin)
+      // Participants are STRICTLY FORBIDDEN from creating audit logs
+      allow create: if isAuthenticated() &&
+        (isStaff() || isCoordinator() || isAdmin()) &&
+        (!('actorUid' in request.resource.data) || request.resource.data.actorUid == request.auth.uid);
 
       // Update / Delete: PERMANENTLY FORBIDDEN — audit trail is immutable
       allow update, delete: if false;
@@ -488,8 +685,8 @@ service cloud.firestore {
       // (collection-level queries require auth so bulk scraping is blocked)
       allow get: if true;
 
-      // Listing/querying the full collection is restricted to authenticated users
-      allow list: if isAuthenticated();
+      // Listing/querying the full collection is restricted to operational staff, coordinators, and admins
+      allow list: if isStaff() || isCoordinator() || isAdmin() || isSuperAdmin();
 
       // Only admins (or Cloud Functions backend) can create certificates
       allow create: if isAdmin() || isSuperAdmin();

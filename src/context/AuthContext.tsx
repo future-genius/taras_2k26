@@ -403,7 +403,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       participantProfile.fullName,
       participantProfile.email,
       participantProfile.college,
-      participantProfile.qrToken,
+      undefined,
       teamCode
     );
 
@@ -428,7 +428,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       participantProfile.fullName,
       participantProfile.email,
       participantProfile.college,
-      participantProfile.qrToken,
+      undefined,
       teamCode
     );
   };

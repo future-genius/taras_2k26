@@ -17,14 +17,16 @@
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
   setDoc,
   updateDoc,
   query,
   where,
+  runTransaction,
   serverTimestamp,
 } from 'firebase/firestore';
-import { firestore } from '../config/firebase';
+import { auth, firestore } from '../config/firebase';
 import { getSupabaseClient, isSupabaseConfigured } from '../config/supabase';
 
 export const SUPABASE_PAYMENT_PROOF_BUCKET = 'payment-proofs';
@@ -45,19 +47,28 @@ export interface SupabaseUploadProgressCallback {
 
 /**
  * Generate controlled and sanitized storage path for registration payment proof.
- * Format: registrations/{registrationId}/payment-proof.{ext}
+ * Format: registrations/{ownerUid}/{registrationId}/proof-{nonce}.{ext}
  */
 export function getPaymentProofStoragePath(
   registrationId: string,
-  fileExtension = 'webp'
+  fileExtension = 'webp',
+  proofNonce?: string,
+  userUid?: string
 ): string {
   const cleanRegId = registrationId.trim().replace(/[^a-zA-Z0-9_-]/g, '');
   const cleanExt = fileExtension.toLowerCase().replace(/[^a-z0-9]/g, '');
-  return `registrations/${cleanRegId}/payment-proof.${cleanExt || 'webp'}`;
+  const suffix = proofNonce ? `proof-${proofNonce}` : 'payment-proof';
+  if (userUid) {
+    const cleanUid = userUid.trim().replace(/[^a-zA-Z0-9_-]/g, '');
+    return `registrations/${cleanUid}/${cleanRegId}/${suffix}.${cleanExt || 'webp'}`;
+  }
+  return `registrations/${cleanRegId}/${suffix}.${cleanExt || 'webp'}`;
 }
 
 /**
  * Upload pre-optimized payment screenshot directly to Supabase Storage.
+ * Validates caller identity and Firestore registration ownership before performing upload.
+ * Enforces immutable object creation (upsert: false).
  */
 export async function uploadPaymentProofToSupabase(
   registrationId: string,
@@ -70,6 +81,11 @@ export async function uploadPaymentProofToSupabase(
     );
   }
 
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    throw new Error('Authentication required: You must be logged in to upload payment proofs.');
+  }
+
   if (!registrationId) {
     throw new Error('Registration ID is required for storage path resolution.');
   }
@@ -78,23 +94,46 @@ export async function uploadPaymentProofToSupabase(
     throw new Error('No valid payment screenshot file provided.');
   }
 
+  // Authoritative ownership check in Firestore before touching Supabase Storage
+  const regDocRef = doc(firestore, 'registrations', registrationId);
+  const regSnap = await getDoc(regDocRef);
+  if (!regSnap.exists()) {
+    throw new Error('Registration record not found. Cannot associate payment proof.');
+  }
+  const regData = regSnap.data();
+  if (regData.uid !== currentUser.uid) {
+    throw new Error('Unauthorized: You do not have permission to upload payment proof for this registration.');
+  }
+  if (regData.status === 'CONFIRMED' || regData.paymentStatus === 'VERIFIED') {
+    throw new Error('Payment for this registration has already been verified.');
+  }
+
   const supabase = getSupabaseClient();
   const rawExt = file instanceof File ? file.name.split('.').pop() || 'webp' : 'webp';
   const cleanExt = rawExt.toLowerCase().includes('png')
     ? 'png'
     : rawExt.toLowerCase().includes('jpg') || rawExt.toLowerCase().includes('jpeg')
       ? 'jpeg'
-      : 'webp';
+      : rawExt.toLowerCase().includes('pdf')
+        ? 'pdf'
+        : 'webp';
 
-  const storagePath = getPaymentProofStoragePath(registrationId, cleanExt);
-  const contentType = file.type || (cleanExt === 'webp' ? 'image/webp' : 'image/jpeg');
+  // Generate cryptographically secure unique nonce for object path to prevent collision or overwriting
+  const nonceBytes = new Uint8Array(4);
+  (typeof crypto !== 'undefined' ? crypto : (window as any).crypto).getRandomValues(nonceBytes);
+  const nonce = Array.from(nonceBytes, (b: number) => b.toString(16).padStart(2, '0')).join('');
+
+  const ownerUid = regData.uid || currentUser.uid;
+  const storagePath = getPaymentProofStoragePath(registrationId, cleanExt, nonce, ownerUid);
+  const contentType = file.type || (cleanExt === 'pdf' ? 'application/pdf' : cleanExt === 'webp' ? 'image/webp' : 'image/jpeg');
 
   if (onProgress) onProgress(15);
 
-  // Set up progress indicator
+  let simulatedProgress = 20;
   const progressTimer = setInterval(() => {
-    if (onProgress) {
-      onProgress(Math.floor(25 + Math.random() * 65));
+    if (onProgress && simulatedProgress < 85) {
+      simulatedProgress += 10;
+      onProgress(simulatedProgress);
     }
   }, 250);
 
@@ -103,7 +142,7 @@ export async function uploadPaymentProofToSupabase(
       .from(SUPABASE_PAYMENT_PROOF_BUCKET)
       .upload(storagePath, file, {
         contentType,
-        upsert: true, // Allow replacing for resubmissions
+        upsert: false, // Disallow overwriting to preserve immutable audit trail
         cacheControl: '3600',
       });
 
@@ -173,11 +212,11 @@ export interface SavePaymentSubmissionParams {
 }
 
 /**
- * Atomically persist payment submission in Firestore.
+ * Atomically persist payment submission in Firestore with UTR uniqueness guarantee.
  *
- * Sequence:
- * 1. Validates UTR format
- * 2. Checks for duplicate UTR usage across other registrations
+ * Sequence (Atomic Firestore Transaction):
+ * 1. Validates UTR format & normalizes string
+ * 2. Checks/reserves utr_registry/{normalizedUTR} atomically
  * 3. Updates Firestore registration with paymentProof metadata
  * 4. Sets status = 'PAYMENT_VERIFICATION_PENDING'
  * 5. Logs audit entry in 'audit_logs'
@@ -193,41 +232,68 @@ export async function savePaymentProofSubmissionToFirestore({
     throw new Error('Payment screenshot storage path is missing.');
   }
 
-  // Duplicate UTR check across other registrations
-  const regsRef = collection(firestore, 'registrations');
-  const duplicateQuery = query(regsRef, where('utrNumber', '==', trimmedUtr));
-  const duplicateSnap = await getDocs(duplicateQuery);
-
-  let possibleDuplicate = false;
-  for (const documentSnap of duplicateSnap.docs) {
-    if (documentSnap.id !== registrationId) {
-      possibleDuplicate = true;
-      break;
-    }
+  const normalizedUtr = trimmedUtr.toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (!normalizedUtr) {
+    throw new Error('Invalid UTR format. Please provide a valid transaction reference.');
   }
 
+  const utrRef = doc(firestore, 'utr_registry', normalizedUtr);
   const regRef = doc(firestore, 'registrations', registrationId);
   const now = new Date().toISOString();
+  const currentUserUid = auth.currentUser?.uid;
 
-  // Atomically persist storage references and set status to PAYMENT_VERIFICATION_PENDING
-  await updateDoc(regRef, {
-    utrNumber: trimmedUtr,
-    paymentProof: {
-      provider: 'supabase',
-      bucket: proofMetadata.bucket,
-      path: proofMetadata.path,
-      fileSize: proofMetadata.fileSize,
-      contentType: proofMetadata.contentType,
-      uploadedAt: proofMetadata.uploadedAt,
-    },
-    // Maintain backwards-compatible fields for existing queries
-    paymentScreenshotPath: proofMetadata.path,
-    paymentScreenshotSize: proofMetadata.fileSize,
-    paymentScreenshotContentType: proofMetadata.contentType,
-    paymentSubmittedAt: now,
-    status: 'PAYMENT_VERIFICATION_PENDING',
-    possibleDuplicate,
-    updatedAt: serverTimestamp(),
+  await runTransaction(firestore, async (transaction) => {
+    // ── READS ──
+    const utrSnap = await transaction.get(utrRef);
+    if (utrSnap.exists()) {
+      const existingData = utrSnap.data();
+      if (existingData.registrationId !== registrationId) {
+        throw new Error(
+          `This UTR / Transaction ID (${trimmedUtr}) has already been submitted for another registration. Duplicates are not allowed.`
+        );
+      }
+    }
+
+    const regSnap = await transaction.get(regRef);
+    if (!regSnap.exists()) {
+      throw new Error('Registration record not found. Please refresh and try again.');
+    }
+    const regData = regSnap.data();
+    const effectiveUid = currentUserUid || regData.uid;
+
+    // ── WRITES ──
+    // 1. Reserve UTR atomically in dedicated registry
+    transaction.set(
+      utrRef,
+      {
+        utrNumber: trimmedUtr,
+        normalizedUtr,
+        registrationId,
+        uid: effectiveUid,
+        createdAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    // 2. Atomically update registration status & proof metadata
+    transaction.update(regRef, {
+      utrNumber: trimmedUtr,
+      paymentProof: {
+        provider: 'supabase',
+        bucket: proofMetadata.bucket,
+        path: proofMetadata.path,
+        fileSize: proofMetadata.fileSize,
+        contentType: proofMetadata.contentType,
+        uploadedAt: proofMetadata.uploadedAt,
+      },
+      paymentScreenshotPath: proofMetadata.path,
+      paymentScreenshotSize: proofMetadata.fileSize,
+      paymentScreenshotContentType: proofMetadata.contentType,
+      paymentSubmittedAt: now,
+      status: 'PAYMENT_VERIFICATION_PENDING',
+      possibleDuplicate: false,
+      updatedAt: serverTimestamp(),
+    });
   });
 
   // Audit log entry
@@ -240,7 +306,7 @@ export async function savePaymentProofSubmissionToFirestore({
       provider: 'supabase',
       storagePath: proofMetadata.path,
       fileSize: proofMetadata.fileSize,
-      possibleDuplicate,
+      possibleDuplicate: false,
       timestamp: serverTimestamp(),
     });
   } catch (auditErr) {
@@ -250,6 +316,7 @@ export async function savePaymentProofSubmissionToFirestore({
 
 /**
  * Resubmit payment proof following administrative rejection.
+ * Uses atomic UTR registry transaction.
  */
 export async function resubmitPaymentProofToFirestore({
   registrationId,
@@ -259,38 +326,64 @@ export async function resubmitPaymentProofToFirestore({
   const trimmedUtr = utrNumber.trim();
   if (!trimmedUtr) throw new Error('UTR / Transaction ID is required.');
 
-  const regsRef = collection(firestore, 'registrations');
-  const duplicateQuery = query(regsRef, where('utrNumber', '==', trimmedUtr));
-  const duplicateSnap = await getDocs(duplicateQuery);
-
-  let possibleDuplicate = false;
-  for (const documentSnap of duplicateSnap.docs) {
-    if (documentSnap.id !== registrationId) {
-      possibleDuplicate = true;
-      break;
-    }
+  const normalizedUtr = trimmedUtr.toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (!normalizedUtr) {
+    throw new Error('Invalid UTR format. Please provide a valid transaction reference.');
   }
 
+  const utrRef = doc(firestore, 'utr_registry', normalizedUtr);
   const regRef = doc(firestore, 'registrations', registrationId);
   const now = new Date().toISOString();
+  const currentUserUid = auth.currentUser?.uid;
 
-  await updateDoc(regRef, {
-    utrNumber: trimmedUtr,
-    paymentProof: {
-      provider: 'supabase',
-      bucket: proofMetadata.bucket,
-      path: proofMetadata.path,
-      fileSize: proofMetadata.fileSize,
-      contentType: proofMetadata.contentType,
-      uploadedAt: proofMetadata.uploadedAt,
-    },
-    paymentScreenshotPath: proofMetadata.path,
-    paymentScreenshotSize: proofMetadata.fileSize,
-    paymentScreenshotContentType: proofMetadata.contentType,
-    paymentSubmittedAt: now,
-    status: 'PAYMENT_VERIFICATION_PENDING',
-    possibleDuplicate,
-    updatedAt: serverTimestamp(),
+  await runTransaction(firestore, async (transaction) => {
+    const utrSnap = await transaction.get(utrRef);
+    if (utrSnap.exists()) {
+      const existingData = utrSnap.data();
+      if (existingData.registrationId !== registrationId) {
+        throw new Error(
+          `This UTR / Transaction ID (${trimmedUtr}) has already been submitted for another registration.`
+        );
+      }
+    }
+
+    const regSnap = await transaction.get(regRef);
+    if (!regSnap.exists()) {
+      throw new Error('Registration record not found.');
+    }
+    const regData = regSnap.data();
+    const effectiveUid = currentUserUid || regData.uid;
+
+    transaction.set(
+      utrRef,
+      {
+        utrNumber: trimmedUtr,
+        normalizedUtr,
+        registrationId,
+        uid: effectiveUid,
+        createdAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    transaction.update(regRef, {
+      utrNumber: trimmedUtr,
+      paymentProof: {
+        provider: 'supabase',
+        bucket: proofMetadata.bucket,
+        path: proofMetadata.path,
+        fileSize: proofMetadata.fileSize,
+        contentType: proofMetadata.contentType,
+        uploadedAt: proofMetadata.uploadedAt,
+      },
+      paymentScreenshotPath: proofMetadata.path,
+      paymentScreenshotSize: proofMetadata.fileSize,
+      paymentScreenshotContentType: proofMetadata.contentType,
+      paymentSubmittedAt: now,
+      status: 'PAYMENT_VERIFICATION_PENDING',
+      possibleDuplicate: false,
+      updatedAt: serverTimestamp(),
+    });
   });
 
   try {
@@ -302,7 +395,7 @@ export async function resubmitPaymentProofToFirestore({
       provider: 'supabase',
       storagePath: proofMetadata.path,
       fileSize: proofMetadata.fileSize,
-      possibleDuplicate,
+      possibleDuplicate: false,
       timestamp: serverTimestamp(),
     });
   } catch (auditErr) {

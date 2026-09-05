@@ -36,8 +36,8 @@ service firebase.storage {
     // - Authenticated access only (No public read)
     // - Read: Staff, Registration Staff, Admins, or Registration Owner
     // - Write: Authenticated Registration Owner or Staff/Admin
-    // - Max File Size: 5 MB (5 * 1024 * 1024 = 5242880 bytes)
-    // - Content Type: Valid image format (image/webp, image/jpeg, image/png)
+    // - Max File Size: 1 MB (1 * 1024 * 1024 = 1048576 bytes)
+    // - Content Type: Valid image or PDF format (image/webp, image/jpeg, image/png, application/pdf)
     match /payment-proofs/{registrationId}/{fileName} {
       allow read: if request.auth != null && (
         request.auth.token.role in ['staff', 'registration_staff', 'admin', 'super_admin', 'PRESIDENT'] ||
@@ -46,8 +46,8 @@ service firebase.storage {
       );
 
       allow write: if request.auth != null
-        && request.resource.size <= 5 * 1024 * 1024
-        && request.resource.contentType.matches('image/.*')
+        && request.resource.size <= 1 * 1024 * 1024
+        && (request.resource.contentType.matches('image/.*') || request.resource.contentType == 'application/pdf')
         && (
           request.auth.token.role in ['staff', 'registration_staff', 'admin', 'super_admin', 'PRESIDENT'] ||
           firestore.get(/databases/(default)/documents/participants/$(request.auth.uid)).data.role in ['admin', 'super_admin', 'PRESIDENT', 'staff', 'registration_staff'] ||
@@ -64,8 +64,8 @@ service firebase.storage {
       );
 
       allow write: if request.auth != null
-        && request.resource.size <= 5 * 1024 * 1024
-        && request.resource.contentType.matches('image/.*')
+        && request.resource.size <= 1 * 1024 * 1024
+        && (request.resource.contentType.matches('image/.*') || request.resource.contentType == 'application/pdf')
         && (
           request.auth.token.role in ['staff', 'registration_staff', 'admin', 'super_admin', 'PRESIDENT'] ||
           firestore.get(/databases/(default)/documents/participants/$(request.auth.uid)).data.role in ['admin', 'super_admin', 'PRESIDENT', 'staff', 'registration_staff'] ||

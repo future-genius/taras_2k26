@@ -2,26 +2,27 @@
  * TARAS 2K26 — Client-Side Payment Proof Image Compression & Optimization Utility
  *
  * Implements browser-based image resizing and compression using HTML5 Canvas API:
- * - Maximum input file size: 5 MB
+ * - Maximum input file size: 1 MB (1,048,576 bytes)
  * - Maximum resolution: 1600 px (aspect ratio preserved, no upscaling)
  * - Preferred format: WebP (with fallback to JPEG)
  * - Quality: 0.75 - 0.82 (optimized for text readability of UTR, amount, date)
  * - Target output size: 200 KB - 800 KB
  */
 
-export const MAX_INPUT_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
+export const MAX_INPUT_FILE_SIZE_BYTES = 1048576; // 1 MB (1,048,576 bytes)
 export const MAX_SCREENSHOT_DIMENSION_PX = 1600; // 1600 px max dimension
 export const DEFAULT_COMPRESSION_QUALITY = 0.82; // Sweet spot for text sharpness & small size
-export const TARGET_MAX_SIZE_BYTES = 850 * 1024; // 850 KB target threshold
+export const TARGET_MAX_SIZE_BYTES = 800 * 1024; // 800 KB target threshold
 
 export const ALLOWED_IMAGE_MIME_TYPES = [
   'image/jpeg',
   'image/jpg',
   'image/png',
   'image/webp',
+  'application/pdf',
 ];
 
-export const ALLOWED_IMAGE_EXTENSIONS = /\.(jpe?g|png|webp)$/i;
+export const ALLOWED_IMAGE_EXTENSIONS = /\.(jpe?g|png|webp|pdf)$/i;
 
 export interface ValidationResult {
   valid: boolean;
@@ -75,11 +76,11 @@ export function validateScreenshotFile(file: File): ValidationResult {
     return { valid: false, error: 'No file selected. Please choose a payment screenshot.' };
   }
 
-  // 1. Check file size <= 5 MB
+  // 1. Check file size <= 1 MB (1,048,576 bytes)
   if (file.size > MAX_INPUT_FILE_SIZE_BYTES) {
     return {
       valid: false,
-      error: 'Payment screenshot must be 5 MB or smaller.',
+      error: 'Payment proof file must be 1 MB (1,048,576 bytes) or smaller.',
     };
   }
 
@@ -90,7 +91,7 @@ export function validateScreenshotFile(file: File): ValidationResult {
   if (!isAllowedMime && !isAllowedExt) {
     return {
       valid: false,
-      error: 'Unsupported file format. Please upload JPG, JPEG, PNG, or WebP.',
+      error: 'Unsupported file format. Please upload JPG, JPEG, PNG, WebP, or PDF.',
     };
   }
 
