@@ -10,6 +10,7 @@ interface VisualAtmosphereProps {
   children?: React.ReactNode;
   height?: 'full' | 'hero' | 'section' | 'compact';
   showWebGrid?: boolean;
+  transparentBg?: boolean;
 }
 
 export const VisualAtmosphere: React.FC<VisualAtmosphereProps> = ({
@@ -20,6 +21,7 @@ export const VisualAtmosphere: React.FC<VisualAtmosphereProps> = ({
   children,
   height = 'hero',
   showWebGrid = true,
+  transparentBg = false,
 }) => {
   const env: PageVisualEnvironment = TARAS_VISUAL_ENVIRONMENTS[environmentKey] || TARAS_VISUAL_ENVIRONMENTS.home;
 
@@ -33,64 +35,65 @@ export const VisualAtmosphere: React.FC<VisualAtmosphereProps> = ({
   return (
     <div className={`relative w-full overflow-hidden flex items-center justify-center ${heightClasses[height]}`}>
       {/* LEVEL 1 / LEVEL 2 — Background Artwork Layer with Image Blending */}
-      <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
+      {!transparentBg && (
+        <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
+          {/* Dark base fill so screen-blended images sit on pure black */}
+          <div className="absolute inset-0 bg-[#050608]" />
 
-        {/* Dark base fill so screen-blended images sit on pure black */}
-        <div className="absolute inset-0 bg-[#050608]" />
+          {/* Red eye-glow layer — sits UNDER the image for screen-mode glow */}
+          {env.blendMode === 'screen' && (
+            <div
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                background: 'radial-gradient(ellipse 60% 35% at 35% 48%, rgba(220,38,38,0.55) 0%, transparent 70%), radial-gradient(ellipse 60% 35% at 65% 48%, rgba(220,38,38,0.55) 0%, transparent 70%)',
+              }}
+            />
+          )}
 
-        {/* Red eye-glow layer — sits UNDER the image for screen-mode glow */}
-        {env.blendMode === 'screen' && (
+          {/* Base Background Image */}
+          <img
+            src={env.heroImage}
+            alt={env.heroAlt}
+            className="w-full h-full object-cover object-center scale-105 transition-transform duration-1000 ease-out brightness-90 contrast-110"
+            style={{ mixBlendMode: (env.blendMode as React.CSSProperties['mixBlendMode']) || 'normal' }}
+            loading="eager"
+          />
+
+          {/* Black Vignette & Fade Overlay — skip for screen-blended images */}
+          {env.blendMode !== 'screen' && (
+            <div
+              className="absolute inset-0 bg-[#050608]"
+              style={{ opacity: env.overlayOpacity }}
+            />
+          )}
+
+          {/* Dark Red Atmospheric Tint Layer */}
           <div
-            className="absolute inset-0 pointer-events-none"
+            className="absolute inset-0 mix-blend-color-dodge pointer-events-none"
             style={{
-              background: 'radial-gradient(ellipse 60% 35% at 35% 48%, rgba(220,38,38,0.55) 0%, transparent 70%), radial-gradient(ellipse 60% 35% at 65% 48%, rgba(220,38,38,0.55) 0%, transparent 70%)',
+              background: 'radial-gradient(ellipse at 50% 30%, rgba(185, 28, 28, 0.45) 0%, rgba(127, 29, 29, 0.15) 50%, transparent 80%)',
+              opacity: env.redTintOpacity * 2,
             }}
           />
-        )}
 
-        {/* Base Background Image */}
-        <img
-          src={env.heroImage}
-          alt={env.heroAlt}
-          className="w-full h-full object-cover object-center scale-105 transition-transform duration-1000 ease-out brightness-90 contrast-110"
-          style={{ mixBlendMode: (env.blendMode as React.CSSProperties['mixBlendMode']) || 'normal' }}
-          loading="eager"
-        />
-
-        {/* Black Vignette & Fade Overlay — skip for screen-blended images */}
-        {env.blendMode !== 'screen' && (
+          {/* Controlled Section Gradient Masking */}
           <div
-            className="absolute inset-0 bg-[#050608]"
-            style={{ opacity: env.overlayOpacity }}
+            className="absolute inset-0"
+            style={{ background: env.sectionAtmosphere }}
           />
-        )}
 
-        {/* Dark Red Atmospheric Tint Layer */}
-        <div
-          className="absolute inset-0 mix-blend-color-dodge pointer-events-none"
-          style={{
-            background: 'radial-gradient(ellipse at 50% 30%, rgba(185, 28, 28, 0.45) 0%, rgba(127, 29, 29, 0.15) 50%, transparent 80%)',
-            opacity: env.redTintOpacity * 2,
-          }}
-        />
+          {/* Top Fade Edge */}
+          <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-[#050608] via-[#050608]/70 to-transparent" />
 
-        {/* Controlled Section Gradient Masking */}
-        <div
-          className="absolute inset-0"
-          style={{ background: env.sectionAtmosphere }}
-        />
+          {/* Bottom Fade Edge */}
+          <div className="absolute bottom-0 left-0 right-0 h-40 bg-gradient-to-t from-[#050608] via-[#050608]/80 to-transparent" />
 
-        {/* Top Fade Edge */}
-        <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-[#050608] via-[#050608]/70 to-transparent" />
-
-        {/* Bottom Fade Edge */}
-        <div className="absolute bottom-0 left-0 right-0 h-40 bg-gradient-to-t from-[#050608] via-[#050608]/80 to-transparent" />
-
-        {/* LEVEL 4 — Micro Web Texture Overlay */}
-        {showWebGrid && (
-          <div className="absolute inset-0 bg-web-grid opacity-30 mix-blend-overlay pointer-events-none" />
-        )}
-      </div>
+          {/* LEVEL 4 — Micro Web Texture Overlay */}
+          {showWebGrid && (
+            <div className="absolute inset-0 bg-web-grid opacity-30 mix-blend-overlay pointer-events-none" />
+          )}
+        </div>
+      )}
 
       {/* Foreground Content */}
       <div className="relative z-10 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center flex flex-col items-center justify-center">

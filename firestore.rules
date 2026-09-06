@@ -705,5 +705,14 @@ service cloud.firestore {
       allow read: if isAdmin() || isSuperAdmin();
       allow write: if isAdmin() || isSuperAdmin();
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Automated Email Delivery History — Idempotent delivery tracking
+    // ─────────────────────────────────────────────────────────────────────────
+    match /email_deliveries/{deliveryId} {
+      // Restricted to Admins and Service Account (participants cannot read/write)
+      allow read: if isAdmin() || isSuperAdmin();
+      allow write: if isAdmin() || isSuperAdmin();
+    }
   }
 }

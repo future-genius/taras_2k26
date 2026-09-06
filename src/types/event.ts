@@ -13,7 +13,7 @@ export interface EventRound {
 
 export interface EventCoordinator {
   name: string;
-  role: 'Faculty Coordinator' | 'Student Event Head' | 'Co-head';
+  role: 'Faculty Coordinator' | 'Student Event Head' | 'Co-head' | 'Internal Coordinator' | 'External Coordinator' | string;
   phone?: string;
   email?: string;
   department?: string;

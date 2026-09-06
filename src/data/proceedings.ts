@@ -41,7 +41,7 @@ export const MOCK_PROCEEDINGS: ProceedingItem[] = [
     papersCount: 50,
     isbn: '978-93-90000-26-0 (Reserved)',
     downloadUrlPlaceholder: '#upcoming-taras-2k26-proceedings',
-    description: 'All selected high-scoring papers from Paperionix 2026 will be compiled into the official ISBN indexed TARAS 2K26 E-Souvenir.',
+    description: 'All selected high-scoring papers from Paper-X-Verse 2026 will be compiled into the official ISBN indexed TARAS 2K26 E-Souvenir.',
     editors: ['Dr. Komala', 'Dr. G. Uresh Kumar'],
   },
 ];

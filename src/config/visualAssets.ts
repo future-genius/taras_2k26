@@ -7,6 +7,7 @@
  */
 
 import spideyEyesImg from '../assets/spidey-eyes.jpg';
+import teamBgSpideyNoir from '../assets/team-bg-spidey-noir.jpg';
 
 export interface PageVisualEnvironment {
   heroImage: string;
@@ -69,10 +70,10 @@ export const TARAS_VISUAL_ENVIRONMENTS: Record<string, PageVisualEnvironment> = 
     webOverlayDensity: 'medium',
   },
   team: {
-    heroImage: '/images/about/about-city.jpg',
-    heroAlt: 'TARAS 2K26 Executive Dark Web Professional Environment',
-    sectionAtmosphere: 'linear-gradient(180deg, rgba(10,12,16,0.8) 0%, rgba(63,0,0,0.3) 100%)',
-    overlayOpacity: 0.7,
+    heroImage: teamBgSpideyNoir,
+    heroAlt: 'TARAS 2K26 Spider-Man Noir Team Environment',
+    sectionAtmosphere: 'linear-gradient(180deg, rgba(5,6,8,0.3) 0%, rgba(63,0,0,0.3) 100%)',
+    overlayOpacity: 0.4,
     redTintOpacity: 0.25,
     webOverlayDensity: 'medium',
   },

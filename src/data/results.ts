@@ -4,7 +4,7 @@ export const MOCK_RESULTS: EventResult[] = [
   {
     id: 'res-01',
     eventId: 'taras-01',
-    eventName: 'Paperionix (Paper Presentation)',
+    eventName: 'Paper-X-Verse (MCU-Themed Paper Presentation)',
     category: 'TECHNICAL',
     winner: {
       name: 'K. Vignesh & Team',

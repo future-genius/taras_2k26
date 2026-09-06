@@ -3,15 +3,15 @@ import type { Variants } from 'framer-motion';
 // Checks prefers-reduced-motion at call time
 const reduced = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-const easeCustom: [number, number, number, number] = [0.23, 1, 0.32, 1];
+const easeCustom: [number, number, number, number] = [0.22, 1, 0.36, 1];
 
 /** Standard section/card fade-up entrance */
 export const fadeInUp: Variants = {
-  hidden: { opacity: reduced ? 1 : 0, y: reduced ? 0 : 20 },
+  hidden: { opacity: reduced ? 1 : 0, y: reduced ? 0 : 24 },
   visible: {
     opacity: 1,
     y: 0,
-    transition: { duration: reduced ? 0 : 0.45, ease: easeCustom },
+    transition: { duration: reduced ? 0 : 0.5, ease: easeCustom },
   },
 };
 
@@ -20,57 +20,78 @@ export const staggerContainer: Variants = {
   hidden: {},
   visible: {
     transition: {
-      staggerChildren: reduced ? 0 : 0.08,
-      delayChildren: reduced ? 0 : 0.05,
+      staggerChildren: reduced ? 0 : 0.07,
+      delayChildren: reduced ? 0 : 0.04,
     },
   },
 };
 
 /** Individual card item inside a stagger container */
 export const cardEntrance: Variants = {
-  hidden: { opacity: reduced ? 1 : 0, y: reduced ? 0 : 18, scale: reduced ? 1 : 0.97 },
+  hidden: { opacity: reduced ? 1 : 0, y: reduced ? 0 : 20, scale: reduced ? 1 : 0.96 },
   visible: {
     opacity: 1,
     y: 0,
     scale: 1,
-    transition: { duration: reduced ? 0 : 0.4, ease: easeCustom },
+    transition: { duration: reduced ? 0 : 0.45, ease: easeCustom },
   },
 };
 
 /** Page-level entrance */
 export const pageTransitionIn: Variants = {
-  initial: { opacity: reduced ? 1 : 0, y: reduced ? 0 : 16, scale: reduced ? 1 : 0.99 },
+  initial: { opacity: reduced ? 1 : 0, y: reduced ? 0 : 18, scale: reduced ? 1 : 0.985 },
   animate: {
     opacity: 1,
     y: 0,
     scale: 1,
-    transition: { duration: reduced ? 0 : 0.42, ease: easeCustom },
+    transition: { duration: reduced ? 0 : 0.48, ease: easeCustom },
   },
   exit: {
     opacity: reduced ? 1 : 0,
-    y: reduced ? 0 : -10,
-    scale: reduced ? 1 : 0.99,
-    transition: { duration: reduced ? 0 : 0.22, ease: 'easeIn' },
+    y: reduced ? 0 : -14,
+    scale: reduced ? 1 : 0.985,
+    transition: { duration: reduced ? 0 : 0.28, ease: [0.4, 0, 1, 1] },
   },
 };
 
 /** Hero section — longer cinematic reveal */
 export const heroReveal: Variants = {
-  hidden: { opacity: reduced ? 1 : 0, y: reduced ? 0 : 30 },
+  hidden: { opacity: reduced ? 1 : 0, y: reduced ? 0 : 36, scale: reduced ? 1 : 0.98 },
   visible: {
     opacity: 1,
     y: 0,
-    transition: { duration: reduced ? 0 : 0.7, ease: easeCustom },
+    scale: 1,
+    transition: { duration: reduced ? 0 : 0.75, ease: easeCustom },
   },
 };
 
 /** Slide-in from left for timeline steps */
 export const slideInLeft: Variants = {
-  hidden: { opacity: reduced ? 1 : 0, x: reduced ? 0 : -24 },
+  hidden: { opacity: reduced ? 1 : 0, x: reduced ? 0 : -28 },
   visible: {
     opacity: 1,
     x: 0,
-    transition: { duration: reduced ? 0 : 0.45, ease: easeCustom },
+    transition: { duration: reduced ? 0 : 0.5, ease: easeCustom },
+  },
+};
+
+/** Slide-in from right for timeline steps */
+export const slideInRight: Variants = {
+  hidden: { opacity: reduced ? 1 : 0, x: reduced ? 0 : 28 },
+  visible: {
+    opacity: 1,
+    x: 0,
+    transition: { duration: reduced ? 0 : 0.5, ease: easeCustom },
+  },
+};
+
+/** Scale entrance for badges and focal cards */
+export const scaleIn: Variants = {
+  hidden: { opacity: reduced ? 1 : 0, scale: reduced ? 1 : 0.9 },
+  visible: {
+    opacity: 1,
+    scale: 1,
+    transition: { duration: reduced ? 0 : 0.4, ease: easeCustom },
   },
 };
 
@@ -99,6 +120,6 @@ export const accordionContent: Variants = {
   expanded: {
     height: 'auto',
     opacity: 1,
-    transition: { duration: reduced ? 0 : 0.3, ease: easeCustom },
+    transition: { duration: reduced ? 0 : 0.35, ease: easeCustom },
   },
 };

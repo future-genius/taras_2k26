@@ -57,7 +57,7 @@ export const AnnouncementsPage: React.FC = () => {
             variant="outline"
             size="sm"
             icon={<Sparkles className="w-4 h-4 text-[#b91c1c]" />}
-            onClick={() => notify('SHORTLISTED', 'Team Shortlist Released', 'Paperionix Round 1 abstract shortlisted participants notified.')}
+            onClick={() => notify('SHORTLISTED', 'Team Shortlist Released', 'Paper-X-Verse Round 1 abstract shortlisted participants notified.')}
           >
             Trigger Spider Sense Alert
           </Button>

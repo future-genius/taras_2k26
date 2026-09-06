@@ -61,10 +61,18 @@ export const VenuePage: React.FC = () => {
     {
       id: 'z4',
       name: 'ECE Block — Floor 3',
-      purpose: 'Paperionix Seminar Halls & VLSI EDA Design Center',
+      purpose: 'Paper-X-Verse Seminar Halls & VLSI EDA Design Center',
       time: '10:00 AM ONWARDS',
       badge: 'FLOOR 3 HALLS',
       icon: <Compass className="w-5 h-5 text-[#ff2b2b]" />,
+    },
+    {
+      id: 'z5',
+      name: 'New Building, SRM VEC',
+      purpose: 'Doc Ock’s Clue Cartel — Inter-Department Technical Game Arena',
+      time: '10:30 AM ONWARDS',
+      badge: 'NEW BUILDING',
+      icon: <Layers className="w-5 h-5 text-[#ff2b2b]" />,
     },
   ];
 

@@ -32,31 +32,31 @@ export const DEFAULT_SCORING_CRITERIA: ScoreCriterion[] = [
 ];
 
 export const EVENT_SPECIFIC_CRITERIA: Record<string, ScoreCriterion[]> = {
-  // Paperionix: Technical Paper Presentation
+  // Paper-X-Verse: MCU-Themed Technical Paper Presentation
   'taras-01': [
     {
-      id: 'p-depth',
-      name: 'Technical Depth & Originality',
-      description: 'Originality of research, depth of literature survey, and theoretical novelty.',
-      maxScore: 30,
-    },
-    {
-      id: 'p-methodology',
-      name: 'Problem Statement & Methodology',
-      description: 'Clarity of problem formulation, mathematical models, and methodology.',
+      id: 'p-content',
+      name: 'Content Quality & Technical Depth',
+      description: 'Technical accuracy, depth of engineering principles, and clarity of methodology.',
       maxScore: 25,
     },
     {
-      id: 'p-presentation',
-      name: 'Presentation & Slides Design',
-      description: 'Adherence to IEEE format, slide quality, verbal clarity, and time management.',
+      id: 'p-innovation',
+      name: 'Innovation & Originality',
+      description: 'Novelty of idea, unique problem solving approach, and originality.',
       maxScore: 25,
     },
     {
-      id: 'p-defense',
-      name: 'Response to Jury Queries & Defense',
-      description: 'Mastery of topic during the Q&A cross-examination defense.',
-      maxScore: 20,
+      id: 'p-delivery',
+      name: 'Presentation & Delivery Clarity',
+      description: 'Slide design quality, verbal delivery confidence, and adherence to 8-minute limit.',
+      maxScore: 25,
+    },
+    {
+      id: 'p-mcu',
+      name: 'Relevance of MCU Ability Correlation',
+      description: 'Mandatory Marvel superpower explanation quality and how well it correlates with the project technology.',
+      maxScore: 25,
     },
   ],
 
@@ -157,6 +157,62 @@ export const EVENT_SPECIFIC_CRITERIA: Record<string, ScoreCriterion[]> = {
       name: 'Team Strategy & Integrity',
       description: 'Adherence to route rules, collaboration, and fair play.',
       maxScore: 25,
+    },
+  ],
+
+  // Doc Ock’s Clue Cartel: Inter-Department Technical Game
+  'taras-07': [
+    {
+      id: 'd-clue-bidding',
+      name: 'Round 1 Clue Bidding & Risk Strategy',
+      description: 'Efficiency and calculated risk-taking in claiming questions with minimum clues (+50 for 0 clues to +10 for 4).',
+      maxScore: 35,
+    },
+    {
+      id: 'd-wheel-accuracy',
+      name: 'Round 2 Wheel Category Accuracy',
+      description: 'Precision in answering technical, electrical, EV, environmental, aptitude & programming wheel challenges (+15 points).',
+      maxScore: 35,
+    },
+    {
+      id: 'd-task-bonus',
+      name: 'Task Performance & Bonus Points',
+      description: 'Successful completion of task chit challenges (+5 bonus points + category selection advantage).',
+      maxScore: 15,
+    },
+    {
+      id: 'd-teamwork',
+      name: 'Team Collaboration & Rule Adherence',
+      description: 'Communication, strategic coordination, and strict adherence to game rules.',
+      maxScore: 15,
+    },
+  ],
+
+  // Knull’s Void: Fast-Paced ECE Memory & Speed Challenge
+  'taras-08': [
+    {
+      id: 'kv-recall',
+      name: 'Round 1: Component Recall Accuracy',
+      description: 'Quantity and precision of ECE components recalled from memory (Resistors, ICs, Sensors, etc.).',
+      maxScore: 35,
+    },
+    {
+      id: 'kv-speed',
+      name: 'Round 2: Cup Pyramid Speed & Recreation',
+      description: 'Speed and exactness in recreating the memorized colored cup arrangement.',
+      maxScore: 30,
+    },
+    {
+      id: 'kv-tech',
+      name: 'Technical Reasoning & Circuit Logic',
+      description: 'Accuracy in solving logic-gate circuits, output determination, and ECE quiz questions.',
+      maxScore: 25,
+    },
+    {
+      id: 'kv-teamwork',
+      name: 'Team Coordination & Time Management',
+      description: 'Coordinated execution under pressure and adherence to time limits.',
+      maxScore: 10,
     },
   ],
 };

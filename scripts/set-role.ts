@@ -30,7 +30,7 @@ Usage:
 Example:
   npx ts-node scripts/set-role.ts 633606057179adminUid admin
   npx ts-node scripts/set-role.ts staffUid123 staff
-  npx ts-node scripts/set-role.ts coordinatorUid coordinator paperionix,circuitrix
+  npx ts-node scripts/set-role.ts coordinatorUid coordinator paper-x-verse,circuitrix
   `);
   process.exit(1);
 }

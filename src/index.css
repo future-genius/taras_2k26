@@ -113,6 +113,21 @@ body {
   box-shadow: 0 8px 32px 0 rgba(127, 29, 29, 0.12);
 }
 
+/* Responsive Device-Specific Team Page Background System */
+.team-page-responsive-bg {
+  background-image: url("/assets/team/team-bg-desktop.jpg");
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+@media (max-width: 768px) {
+  .team-page-responsive-bg {
+    background-image: url("/assets/team/team-bg-mobile.jpg");
+    background-position: center top;
+  }
+}
+
 /* Text Gradients — strictly White → Dark Red, NO pink */
 .text-gradient-red {
   background: linear-gradient(135deg, #ffffff 0%, #cc0000 50%, #7f1d1d 100%);
@@ -523,3 +538,84 @@ body {
 .animate-scanline {
   animation: qrScanline 2s ease-in-out infinite alternate;
 }
+
+/* ── Photo Frame Sheen & Holographic Radar Animations ── */
+@keyframes lightSweep {
+  0% {
+    transform: translateX(-150%) translateY(-150%) rotate(25deg);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.8;
+  }
+  60% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: translateX(150%) translateY(150%) rotate(25deg);
+    opacity: 0;
+  }
+}
+
+.animate-light-sweep {
+  animation: lightSweep 4.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@keyframes spinSlow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin-slow {
+  animation: spinSlow 20s linear infinite;
+}
+
+@keyframes spinReverse {
+  from {
+    transform: rotate(360deg);
+  }
+  to {
+    transform: rotate(0deg);
+  }
+}
+
+.animate-spin-reverse {
+  animation: spinReverse 28s linear infinite;
+}
+
+@keyframes radarPulse {
+  0% {
+    transform: scale(0.85);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.18);
+    opacity: 0.25;
+  }
+  100% {
+    transform: scale(1.35);
+    opacity: 0;
+  }
+}
+
+.animate-radar-pulse {
+  animation: radarPulse 3s ease-out infinite;
+}
+
+@keyframes floatGentle {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+.animate-float-gentle {
+  animation: floatGentle 5s ease-in-out infinite;
+}
+

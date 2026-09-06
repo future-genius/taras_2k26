@@ -254,7 +254,7 @@ export const AnnouncementManagementPage: React.FC = () => {
               <input
                 type="text"
                 required
-                placeholder="e.g. Paperionix Round 2 Commencing at Mini Hall 1"
+                placeholder="e.g. Paper-X-Verse Round 2 Commencing at Mini Hall 1"
                 value={formData.title || ''}
                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                 className="w-full px-3 py-2 bg-[#0a0c10] border border-slate-800 rounded-xl text-white focus:outline-none focus:border-[#b91c1c]"

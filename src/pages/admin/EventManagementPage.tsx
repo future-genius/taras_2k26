@@ -301,7 +301,7 @@ export const EventManagementPage: React.FC = () => {
               <input
                 type="text"
                 required
-                placeholder="e.g. Paperionix 2026"
+                placeholder="e.g. Paper-X-Verse 2026"
                 value={formData.name || ''}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 className="w-full px-3 py-2 bg-[#0a0c10] border border-slate-800 rounded-xl text-white focus:outline-none focus:border-[#b91c1c]"

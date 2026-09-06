@@ -37,8 +37,8 @@ export const NotificationCenterPage: React.FC = () => {
     {
       id: 'n3',
       type: 'ANNOUNCEMENT',
-      title: 'Paperionix Abstract Submissions Extended',
-      message: 'IEEE Technical Paper abstract uploads extended until 25 September 11:59 PM.',
+      title: 'Paper-X-Verse Abstract Submissions Extended',
+      message: 'Technical Paper abstract uploads extended until 25 September 11:59 PM.',
       timestamp: '2 HOURS AGO',
       read: true,
     },

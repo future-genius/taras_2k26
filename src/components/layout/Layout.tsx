@@ -12,6 +12,7 @@ import { CustomCursor } from '../common/CustomCursor';
 import { SpiderSenseProvider } from '../visual/SpiderSenseNotification';
 import { LiveModeProvider } from '../visual/LiveModeToggle';
 import { QRPassVisual } from '../visual/QRPassVisual';
+import { SpideyWidget } from '../visual/SpideyWidget';
 import { ParticipantMobileBottomNav } from './ParticipantNav';
 import { Shield, CheckCircle2 } from 'lucide-react';
 
@@ -47,6 +48,9 @@ export const Layout: React.FC = () => {
         <div className="min-h-screen flex flex-col bg-[#050608] text-slate-100 relative selection:bg-[#3f0000] selection:text-white">
           {/* Interactive Spider Web particle canvas */}
           <SpiderCanvas density={50} />
+
+          {/* Global Animated Spidey Web Mascot Widget */}
+          <SpideyWidget />
 
           {/* Custom Desktop Cursor */}
           <CustomCursor />

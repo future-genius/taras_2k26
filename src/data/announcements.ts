@@ -4,7 +4,7 @@ export const MOCK_ANNOUNCEMENTS: Announcement[] = [
   {
     id: 'ann-01',
     title: 'TARAS 2K26 Portal Live',
-    message: 'Official registration portal for Paperionix, Circuitrix, ElectraHack, CineMatrix, and Workshops is now officially open.',
+    message: 'Official registration portal for Paper-X-Verse, Circuitrix, ElectraHack, CineMatrix, and Workshops is now officially open.',
     category: 'GENERAL',
     timestamp: '2026-08-25T10:00:00Z',
     priority: 'HIGH',
@@ -22,13 +22,13 @@ export const MOCK_ANNOUNCEMENTS: Announcement[] = [
   },
   {
     id: 'ann-03',
-    title: 'Paperionix IEEE Template Released',
-    message: 'Authors presenting in Paperionix can now download the official IEEE double-column template from the Proceedings section.',
+    title: 'Paper-X-Verse Guidelines & MCU Theme Mandate',
+    message: 'Participants presenting in Paper-X-Verse must prepare an 8-minute presentation + 2-minute Q&A concluding with a mandatory MCU superpower explanation.',
     category: 'SHORTLIST',
     timestamp: '2026-08-28T09:15:00Z',
     eventId: 'taras-01',
     priority: 'NORMAL',
-    authorRole: 'Paperionix Desk',
+    authorRole: 'Paper-X-Verse Desk',
   },
   {
     id: 'ann-04',
