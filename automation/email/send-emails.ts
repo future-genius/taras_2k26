@@ -56,6 +56,13 @@ async function main() {
   initFirebaseAdmin();
   const db = admin.firestore();
 
+  // TEST MODE has a dedicated end-to-end probe that does not depend on
+  // production registrations, countdown dates, or delivery records.
+  if (IS_TEST_MODE) {
+    await runDedicatedTestEmail();
+    return;
+  }
+
   // 2. Calculate Daily Limit Quota Remaining
   const todayIST = getTodayIST();
   const sentTodayCount = await getSentCountForDate(db, todayIST);
@@ -91,18 +98,14 @@ async function main() {
   let skippedCount = 0;
   let failedCount = 0;
   let deferredCount = 0;
-  let testSentCount = 0;
-  let testFailedCount = 0;
 
   // 5. Process Tasks within Daily Limit Capacity
   for (const task of tasks) {
-    // Check if task was sent during this run or recorded
     if (existingDeliveries.get(task.deliveryId) === 'sent') {
       skippedCount++;
       continue;
     }
 
-    // Check remaining daily capacity
     if (remainingQuota <= 0) {
       deferredCount++;
       continue;
@@ -112,8 +115,7 @@ async function main() {
     console.log(`Processing Task: [${task.emailType}] ${task.deliveryId}`);
     console.log(`Recipient: ${task.fullName} (${task.email}) | ID: ${task.participantId}`);
 
-    // Generate Email Payload
-    const targetEmail = IS_TEST_MODE && TEST_EMAIL ? TEST_EMAIL : task.email;
+    const targetEmail = task.email;
     let payload: { subject: string; html: string; text: string };
 
     if (task.emailType === 'REGISTRATION_CONFIRMATION') {
@@ -148,7 +150,6 @@ async function main() {
       continue;
     }
 
-    // Dispatch via Brevo REST API
     const result = await sendBrevoEmail({
       toEmail: targetEmail,
       toName: task.fullName,
@@ -159,37 +160,17 @@ async function main() {
 
     if (result.success) {
       console.log(`[SUCCESS] Delivered email to ${targetEmail} (MessageId: ${result.messageId})`);
-
-      if (IS_TEST_MODE) {
-        // CRITICAL SAFETY RULE:
-        // Do NOT write task.deliveryId to email_deliveries in test mode.
-        // A test must never suppress the participant's later production email.
-        testSentCount++;
-        remainingQuota--;
-        continue;
-      }
-
       sentCount++;
       remainingQuota--;
-
-      // Record successful production delivery only.
       await recordDelivery(db, task, todayIST, 'sent', null);
       existingDeliveries.set(task.deliveryId, 'sent');
     } else {
       console.error(`[ERROR] Failed to send email to ${targetEmail}: ${result.error}`);
-
-      if (IS_TEST_MODE) {
-        // Do not persist test failures into production state either.
-        testFailedCount++;
-        continue;
-      }
-
       await recordDelivery(db, task, todayIST, 'failed', result.error || 'Unknown error');
       failedCount++;
     }
   }
 
-  // 6. Print Execution Summary
   printSummary({
     found: tasks.length,
     sent: sentCount,
@@ -197,15 +178,66 @@ async function main() {
     failed: failedCount,
     remaining: deferredCount,
     dailyLimit: DAILY_LIMIT,
-    sentToday: sentTodayCount + (SHOULD_PERSIST_PRODUCTION_DELIVERY ? sentCount : 0),
-    testSent: IS_TEST_MODE ? testSentCount : undefined,
-    testFailed: IS_TEST_MODE ? testFailedCount : undefined
+    sentToday: sentTodayCount + sentCount
   });
 }
 
 /**
+ * Dedicated end-to-end TEST MODE probe.
+ * Sends exactly one test email through Brevo without reading or writing
+ * production email_deliveries state and without consuming production quota.
+ */
+async function runDedicatedTestEmail() {
+  if (!TEST_EMAIL) {
+    throw new Error('TEST_EMAIL is required when EMAIL_TEST_MODE=true.');
+  }
+
+  const testParticipantName = 'TARAS 2K26 Test Participant';
+  const payload = generateRegistrationConfirmationEmail({
+    participantName: testParticipantName,
+    participantId: 'TEST-TARAS-2K26',
+    email: TEST_EMAIL,
+    college: 'Test Engineering College',
+    department: 'Electronics and Communication Engineering',
+    registeredEvents: ['TEST EVENT — EMAIL PIPELINE'],
+    eventDate: '26 September 2026',
+    venue: VENUE_NAME
+  });
+
+  console.log('[Test] Running dedicated end-to-end Brevo test.');
+  console.log(`[Test] Recipient: ${TEST_EMAIL}`);
+  console.log(`[Test] Subject: "${payload.subject}"`);
+  console.log('[Test] No production Firestore delivery records will be read or modified.');
+
+  const result = await sendBrevoEmail({
+    toEmail: TEST_EMAIL,
+    toName: testParticipantName,
+    subject: `[TEST] ${payload.subject}`,
+    htmlContent: payload.html,
+    textContent: payload.text
+  });
+
+  if (!result.success) {
+    console.error(`[Test] FAILED: ${result.error}`);
+    console.log('[Test] No production email_deliveries changes were made.');
+    throw new Error(result.error || 'Brevo test email failed.');
+  }
+
+  console.log(`[Test] SUCCESS: Brevo accepted the test email (MessageId: ${result.messageId}).`);
+  console.log('[Test] Production email_deliveries: UNCHANGED.');
+  console.log('[Test] Production daily quota: UNCHANGED.');
+  console.log('====================================================');
+  console.log('                 TEST SUMMARY                      ');
+  console.log('====================================================');
+  console.log('Test emails sent: 1');
+  console.log('Test emails failed: 0');
+  console.log('Production records changed: 0');
+  console.log('Production quota consumed: 0');
+  console.log('====================================================');
+}
+
+/**
  * Record a production delivery attempt.
- * Guarded so TEST/DRY-RUN can never mutate production delivery state.
  */
 async function recordDelivery(
   db: admin.firestore.Firestore,
@@ -240,9 +272,6 @@ async function recordDelivery(
   }
 }
 
-/**
- * Initialize Firebase Admin SDK
- */
 function initFirebaseAdmin() {
   if (admin.apps.length > 0) return;
 
@@ -250,9 +279,7 @@ function initFirebaseAdmin() {
   if (serviceAccountJson) {
     try {
       const serviceAccount = JSON.parse(serviceAccountJson);
-      admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount)
-      });
+      admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
       console.log('[Firebase] Admin SDK initialized via FIREBASE_SERVICE_ACCOUNT secret.');
       return;
     } catch (err: any) {
@@ -260,7 +287,6 @@ function initFirebaseAdmin() {
     }
   }
 
-  // Fallback to default application credentials if available
   try {
     admin.initializeApp();
     console.log('[Firebase] Admin SDK initialized via default application credentials.');
@@ -273,24 +299,13 @@ function initFirebaseAdmin() {
   }
 }
 
-/**
- * Get current date string YYYY-MM-DD in IST timezone
- */
 function getTodayIST(): string {
   const now = new Date();
-  const options: Intl.DateTimeFormatOptions = {
-    timeZone: TIMEZONE,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  };
-  const formatter = new Intl.DateTimeFormat('en-CA', options); // returns YYYY-MM-DD
+  const options: Intl.DateTimeFormatOptions = { timeZone: TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit' };
+  const formatter = new Intl.DateTimeFormat('en-CA', options);
   return formatter.format(now);
 }
 
-/**
- * Query existing delivery status map from email_deliveries collection
- */
 async function getExistingDeliveries(db: admin.firestore.Firestore): Promise<Map<string, 'sent' | 'failed'>> {
   const map = new Map<string, 'sent' | 'failed'>();
   try {
@@ -305,9 +320,6 @@ async function getExistingDeliveries(db: admin.firestore.Firestore): Promise<Map
   return map;
 }
 
-/**
- * Get count of emails successfully sent today in IST
- */
 async function getSentCountForDate(db: admin.firestore.Firestore, dateIST: string): Promise<number> {
   try {
     const snapshot = await db.collection('email_deliveries')
@@ -320,9 +332,6 @@ async function getSentCountForDate(db: admin.firestore.Firestore, dateIST: strin
   }
 }
 
-/**
- * Gather Registration Confirmation Email Tasks
- */
 async function gatherRegistrationConfirmationTasks(
   db: admin.firestore.Firestore,
   existingDeliveries: Map<string, 'sent' | 'failed'>
@@ -337,10 +346,8 @@ async function gatherRegistrationConfirmationTasks(
       const registrationId = doc.id || reg.registrationId;
       const deliveryId = `reg_${registrationId}_confirmation`;
 
-      // Skip if already sent
       if (existingDeliveries.get(deliveryId) === 'sent') return;
 
-      // Check eligibility: confirmed status or verified payment
       const isConfirmed = reg.status === 'CONFIRMED' ||
                           reg.paymentStatus === 'VERIFIED' ||
                           reg.paymentStatus === 'NOT_REQUIRED';
@@ -371,9 +378,6 @@ async function gatherRegistrationConfirmationTasks(
   return tasks;
 }
 
-/**
- * Gather Countdown Reminder Email Tasks based on IST Event Date
- */
 async function gatherCountdownReminderTasks(
   db: admin.firestore.Firestore,
   existingDeliveries: Map<string, 'sent' | 'failed'>,
@@ -381,7 +385,6 @@ async function gatherCountdownReminderTasks(
 ): Promise<EmailTask[]> {
   const tasks: EmailTask[] = [];
 
-  // Define Trigger Dates relative to Event Date 2026-09-26
   const triggers: { trigger: CountdownTrigger; dateStr: string }[] = [
     { trigger: '7d', dateStr: '2026-09-19' },
     { trigger: '3d', dateStr: '2026-09-23' },
@@ -389,8 +392,6 @@ async function gatherCountdownReminderTasks(
     { trigger: '0d', dateStr: '2026-09-26' }
   ];
 
-  // Select the latest trigger whose date has arrived.
-  // This prevents the 7d trigger from remaining active after Sep 19.
   const activeTrigger = [...triggers].reverse().find(t => todayIST >= t.dateStr);
   if (!activeTrigger) {
     console.log(`[Countdown] No countdown trigger active for date ${todayIST}.`);
@@ -406,9 +407,7 @@ async function gatherCountdownReminderTasks(
       const uid = doc.id || p.uid;
       const deliveryId = `participant_${uid}_countdown_${activeTrigger.trigger}`;
 
-      // Skip if already sent
       if (existingDeliveries.get(deliveryId) === 'sent') return;
-
       if (!p.email) return;
 
       tasks.push({
@@ -431,28 +430,18 @@ async function gatherCountdownReminderTasks(
   return tasks;
 }
 
-/**
- * Helper to fetch all participants into a Map for fast lookup
- */
 async function getParticipantsMap(db: admin.firestore.Firestore): Promise<Map<string, any>> {
   const map = new Map<string, any>();
-  try {
-    const snapshot = await db.collection('participants').get();
-    snapshot.forEach((doc: admin.firestore.QueryDocumentSnapshot) => {
-      const data = doc.data();
-      map.set(doc.id, data);
-      if (data.uid) map.set(data.uid, data);
-      if (data.participantId) map.set(data.participantId, data);
-    });
-  } catch (err: any) {
-    console.warn(`[Firestore] Error loading participants map: ${err.message}`);
-  }
+  const snapshot = await db.collection('participants').get();
+  snapshot.forEach((doc: admin.firestore.QueryDocumentSnapshot) => {
+    const data = doc.data();
+    map.set(doc.id, data);
+    if (data.uid) map.set(data.uid, data);
+    if (data.participantId) map.set(data.participantId, data);
+  });
   return map;
 }
 
-/**
- * Send Transactional Email via Brevo REST API v3
- */
 async function sendBrevoEmail(params: {
   toEmail: string;
   toName: string;
@@ -468,9 +457,9 @@ async function sendBrevoEmail(params: {
     const response = await fetch('https://api.brevo.com/v3/smtp/email', {
       method: 'POST',
       headers: {
+        accept: 'application/json',
         'api-key': BREVO_API_KEY,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
+        'content-type': 'application/json'
       },
       body: JSON.stringify({
         sender: { email: BREVO_SENDER_EMAIL, name: BREVO_SENDER_NAME },
@@ -481,24 +470,15 @@ async function sendBrevoEmail(params: {
       })
     });
 
-    const responseText = await response.text();
-    let responseData: any = {};
-    try {
-      responseData = responseText ? JSON.parse(responseText) : {};
-    } catch {
-      // Non-JSON response; handled by status below.
-    }
-
     if (!response.ok) {
-      return {
-        success: false,
-        error: `${response.status} ${response.statusText}: ${responseText.slice(0, 500)}`
-      };
+      const errorText = await response.text();
+      return { success: false, error: `Brevo API ${response.status}: ${errorText}` };
     }
 
-    return { success: true, messageId: responseData.messageId };
+    const data = await response.json() as { messageId?: string };
+    return { success: true, messageId: data.messageId };
   } catch (err: any) {
-    return { success: false, error: err?.message || 'Unknown network error' };
+    return { success: false, error: err?.message || 'Unknown Brevo API error' };
   }
 }
 
@@ -513,7 +493,7 @@ function printSummary(summary: {
   testSent?: number;
   testFailed?: number;
 }) {
-  console.log('\n====================================================');
+  console.log('====================================================');
   console.log('                 EXECUTION SUMMARY                  ');
   console.log('====================================================');
   console.log(`Found: ${summary.found}`);
@@ -522,15 +502,13 @@ function printSummary(summary: {
   console.log(`Failed: ${summary.failed}`);
   console.log(`Deferred: ${summary.remaining}`);
   console.log(`Emails sent today: ${summary.sentToday} / ${summary.dailyLimit}`);
-  if (summary.testSent !== undefined) {
-    console.log(`Test emails sent: ${summary.testSent}`);
-    console.log(`Test emails failed: ${summary.testFailed || 0}`);
-    console.log('[Safety] TEST MODE made no changes to production email_deliveries records.');
-  }
+  if (summary.testSent !== undefined) console.log(`Test emails sent: ${summary.testSent}`);
+  if (summary.testFailed !== undefined) console.log(`Test emails failed: ${summary.testFailed}`);
+  if (IS_TEST_MODE) console.log('[Safety] TEST MODE made no changes to production email_deliveries records.');
   console.log('====================================================');
 }
 
-main().catch((error) => {
-  console.error('[FATAL] Email automation failed:', error);
+main().catch((err) => {
+  console.error('[FATAL]', err?.message || err);
   process.exit(1);
 });
