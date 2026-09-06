@@ -1,0 +1,59 @@
+name: TARAS 2K26 Email Automation
+
+on:
+  schedule:
+    # Run daily at 02:00 UTC (07:30 AM IST Indian Standard Time)
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Execution Mode'
+        required: true
+        default: 'dry_run'
+        type: choice
+        options:
+          - dry_run
+          - test
+          - production
+      test_email:
+        description: 'Test recipient email (Required if mode is "test")'
+        required: false
+        default: ''
+        type: string
+      daily_limit:
+        description: 'Daily Send Cap (Max emails to send in this execution)'
+        required: false
+        default: '250'
+        type: string
+
+jobs:
+  email-automation:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Codebase
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Email Automation Dependencies
+        run: |
+          cd automation/email
+          npm install
+
+      - name: Execute Email Automation Script
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+          BREVO_SENDER_EMAIL: ${{ secrets.BREVO_SENDER_EMAIL }}
+          BREVO_SENDER_NAME: ${{ secrets.BREVO_SENDER_NAME }}
+          EMAIL_DAILY_LIMIT: ${{ github.event.inputs.daily_limit || '250' }}
+          EMAIL_DRY_RUN: ${{ (github.event_name == 'schedule' || github.event.inputs.mode == 'dry_run' || github.event.inputs.mode == '') && 'true' || 'false' }}
+          EMAIL_TEST_MODE: ${{ (github.event.inputs.mode == 'test') && 'true' || 'false' }}
+          TEST_EMAIL: ${{ github.event.inputs.test_email }}
+        run: |
+          cd automation/email
+          npx tsx send-emails.ts
