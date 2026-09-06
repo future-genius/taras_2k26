@@ -19,6 +19,9 @@ const IS_DRY_RUN = process.env.EMAIL_DRY_RUN?.trim() === 'true';
 const IS_TEST_MODE = process.env.EMAIL_TEST_MODE?.trim() === 'true';
 const TEST_EMAIL = process.env.TEST_EMAIL?.trim() || '';
 
+// TEST MODE must never create/update production delivery records.
+const SHOULD_PERSIST_PRODUCTION_DELIVERY = !IS_DRY_RUN && !IS_TEST_MODE;
+
 const DAILY_LIMIT = parseInt(process.env.EMAIL_DAILY_LIMIT || `${DEFAULT_DAILY_LIMIT}`, 10);
 
 interface EmailTask {
@@ -44,6 +47,10 @@ async function main() {
   console.log(`[Config] Date (IST Timezone): ${getTodayIST()}`);
   console.log(`[Config] Execution Mode: ${IS_DRY_RUN ? 'DRY-RUN (Simulated)' : IS_TEST_MODE ? `TEST MODE (Redirect -> ${TEST_EMAIL})` : 'PRODUCTION'}`);
   console.log(`[Config] Daily Limit: ${DAILY_LIMIT} emails/day`);
+  if (IS_TEST_MODE) {
+    console.log('[Safety] TEST MODE: production delivery records will NOT be created or modified.');
+    console.log('[Safety] TEST MODE: production daily quota will NOT be consumed.');
+  }
 
   // 1. Initialize Firebase Admin SDK
   initFirebaseAdmin();
@@ -84,6 +91,8 @@ async function main() {
   let skippedCount = 0;
   let failedCount = 0;
   let deferredCount = 0;
+  let testSentCount = 0;
+  let testFailedCount = 0;
 
   // 5. Process Tasks within Daily Limit Capacity
   for (const task of tasks) {
@@ -148,45 +157,35 @@ async function main() {
       textContent: payload.text
     });
 
-    const deliveryRef = db.collection('email_deliveries').doc(task.deliveryId);
-
     if (result.success) {
       console.log(`[SUCCESS] Delivered email to ${targetEmail} (MessageId: ${result.messageId})`);
+
+      if (IS_TEST_MODE) {
+        // CRITICAL SAFETY RULE:
+        // Do NOT write task.deliveryId to email_deliveries in test mode.
+        // A test must never suppress the participant's later production email.
+        testSentCount++;
+        remainingQuota--;
+        continue;
+      }
+
       sentCount++;
       remainingQuota--;
 
-      // Record successful delivery
-      await deliveryRef.set({
-        participantId: task.participantId,
-        email: task.email,
-        emailType: task.emailType,
-        trigger: task.trigger || null,
-        status: 'sent',
-        attempts: admin.firestore.FieldValue.increment(1),
-        sentAt: admin.firestore.FieldValue.serverTimestamp(),
-        sentDateIST: todayIST,
-        lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
-        lastError: null,
-        createdAt: admin.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
-
+      // Record successful production delivery only.
+      await recordDelivery(db, task, todayIST, 'sent', null);
       existingDeliveries.set(task.deliveryId, 'sent');
     } else {
       console.error(`[ERROR] Failed to send email to ${targetEmail}: ${result.error}`);
-      failedCount++;
 
-      // Record failed delivery attempt
-      await deliveryRef.set({
-        participantId: task.participantId,
-        email: task.email,
-        emailType: task.emailType,
-        trigger: task.trigger || null,
-        status: 'failed',
-        attempts: admin.firestore.FieldValue.increment(1),
-        lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
-        lastError: result.error,
-        createdAt: admin.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
+      if (IS_TEST_MODE) {
+        // Do not persist test failures into production state either.
+        testFailedCount++;
+        continue;
+      }
+
+      await recordDelivery(db, task, todayIST, 'failed', result.error || 'Unknown error');
+      failedCount++;
     }
   }
 
@@ -198,8 +197,47 @@ async function main() {
     failed: failedCount,
     remaining: deferredCount,
     dailyLimit: DAILY_LIMIT,
-    sentToday: sentTodayCount + (IS_DRY_RUN ? 0 : sentCount)
+    sentToday: sentTodayCount + (SHOULD_PERSIST_PRODUCTION_DELIVERY ? sentCount : 0),
+    testSent: IS_TEST_MODE ? testSentCount : undefined,
+    testFailed: IS_TEST_MODE ? testFailedCount : undefined
   });
+}
+
+/**
+ * Record a production delivery attempt.
+ * Guarded so TEST/DRY-RUN can never mutate production delivery state.
+ */
+async function recordDelivery(
+  db: admin.firestore.Firestore,
+  task: EmailTask,
+  todayIST: string,
+  status: 'sent' | 'failed',
+  lastError: string | null
+) {
+  if (!SHOULD_PERSIST_PRODUCTION_DELIVERY) return;
+
+  const deliveryRef = db.collection('email_deliveries').doc(task.deliveryId);
+  const baseData = {
+    participantId: task.participantId,
+    email: task.email,
+    emailType: task.emailType,
+    trigger: task.trigger || null,
+    status,
+    attempts: admin.firestore.FieldValue.increment(1),
+    lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
+    lastError,
+    createdAt: admin.firestore.FieldValue.serverTimestamp()
+  };
+
+  if (status === 'sent') {
+    await deliveryRef.set({
+      ...baseData,
+      sentAt: admin.firestore.FieldValue.serverTimestamp(),
+      sentDateIST: todayIST
+    }, { merge: true });
+  } else {
+    await deliveryRef.set(baseData, { merge: true });
+  }
 }
 
 /**
@@ -423,24 +461,8 @@ async function sendBrevoEmail(params: {
   textContent: string;
 }): Promise<{ success: boolean; messageId?: string; error?: string }> {
   if (!BREVO_API_KEY) {
-    return { success: false, error: 'BREVO_API_KEY environment variable is not configured.' };
+    return { success: false, error: 'BREVO_API_KEY is not configured.' };
   }
-
-  const payload = {
-    sender: {
-      name: BREVO_SENDER_NAME,
-      email: BREVO_SENDER_EMAIL
-    },
-    to: [
-      {
-        email: params.toEmail,
-        name: params.toName
-      }
-    ],
-    subject: params.subject,
-    htmlContent: params.htmlContent,
-    textContent: params.textContent
-  };
 
   try {
     const response = await fetch('https://api.brevo.com/v3/smtp/email', {
@@ -450,26 +472,37 @@ async function sendBrevoEmail(params: {
         'Content-Type': 'application/json',
         'Accept': 'application/json'
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify({
+        sender: { email: BREVO_SENDER_EMAIL, name: BREVO_SENDER_NAME },
+        to: [{ email: params.toEmail, name: params.toName }],
+        subject: params.subject,
+        htmlContent: params.htmlContent,
+        textContent: params.textContent
+      })
     });
 
-    const resData: any = await response.json().catch(() => ({}));
-
-    if (response.ok) {
-      return { success: true, messageId: resData.messageId || resData.id };
-    } else {
-      const errorMsg = resData.message || resData.code || `HTTP ${response.status} ${response.statusText}`;
-      return { success: false, error: errorMsg };
+    const responseText = await response.text();
+    let responseData: any = {};
+    try {
+      responseData = responseText ? JSON.parse(responseText) : {};
+    } catch {
+      // Non-JSON response; handled by status below.
     }
+
+    if (!response.ok) {
+      return {
+        success: false,
+        error: `${response.status} ${response.statusText}: ${responseText.slice(0, 500)}`
+      };
+    }
+
+    return { success: true, messageId: responseData.messageId };
   } catch (err: any) {
-    return { success: false, error: err.message || 'Network error sending Brevo email' };
+    return { success: false, error: err?.message || 'Unknown network error' };
   }
 }
 
-/**
- * Print Execution Summary Table
- */
-function printSummary(stats: {
+function printSummary(summary: {
   found: number;
   sent: number;
   skipped: number;
@@ -477,22 +510,27 @@ function printSummary(stats: {
   remaining: number;
   dailyLimit: number;
   sentToday: number;
+  testSent?: number;
+  testFailed?: number;
 }) {
   console.log('\n====================================================');
-  console.log('              AUTOMATION EXECUTION SUMMARY         ');
+  console.log('                 EXECUTION SUMMARY                  ');
   console.log('====================================================');
-  console.log(`  Found Total     : ${stats.found}`);
-  console.log(`  Sent            : ${stats.sent}`);
-  console.log(`  Skipped (Sent)  : ${stats.skipped}`);
-  console.log(`  Failed          : ${stats.failed}`);
-  console.log(`  Remaining Queued: ${stats.remaining}`);
-  console.log(`  Daily Limit     : ${stats.dailyLimit}`);
-  console.log(`  Sent Today      : ${stats.sentToday} / ${stats.dailyLimit}`);
-  console.log('====================================================\n');
+  console.log(`Found: ${summary.found}`);
+  console.log(`Sent: ${summary.sent}`);
+  console.log(`Skipped: ${summary.skipped}`);
+  console.log(`Failed: ${summary.failed}`);
+  console.log(`Deferred: ${summary.remaining}`);
+  console.log(`Emails sent today: ${summary.sentToday} / ${summary.dailyLimit}`);
+  if (summary.testSent !== undefined) {
+    console.log(`Test emails sent: ${summary.testSent}`);
+    console.log(`Test emails failed: ${summary.testFailed || 0}`);
+    console.log('[Safety] TEST MODE made no changes to production email_deliveries records.');
+  }
+  console.log('====================================================');
 }
 
-// Execute
-main().catch(err => {
-  console.error('[Fatal Error] Email automation failed:', err);
+main().catch((error) => {
+  console.error('[FATAL] Email automation failed:', error);
   process.exit(1);
 });
