@@ -51,8 +51,9 @@ jobs:
           BREVO_SENDER_EMAIL: ${{ secrets.BREVO_SENDER_EMAIL }}
           BREVO_SENDER_NAME: ${{ secrets.BREVO_SENDER_NAME }}
           EMAIL_DAILY_LIMIT: ${{ github.event.inputs.daily_limit || '250' }}
-          EMAIL_DRY_RUN: ${{ (github.event_name == 'schedule' || github.event.inputs.mode == 'dry_run' || github.event.inputs.mode == '') && 'true' || 'false' }}
-          EMAIL_TEST_MODE: ${{ (github.event.inputs.mode == 'test') && 'true' || 'false' }}
+          # Scheduled runs are LIVE production runs. Manual runs retain their selected mode.
+          EMAIL_DRY_RUN: ${{ (github.event_name != 'schedule' && (github.event.inputs.mode == 'dry_run' || github.event.inputs.mode == '')) && 'true' || 'false' }}
+          EMAIL_TEST_MODE: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'test') && 'true' || 'false' }}
           TEST_EMAIL: ${{ github.event.inputs.test_email }}
         run: |
           cd automation/email
