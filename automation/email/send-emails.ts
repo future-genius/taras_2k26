@@ -351,8 +351,9 @@ async function gatherCountdownReminderTasks(
     { trigger: '0d', dateStr: '2026-09-26' }
   ];
 
-  // Determine active trigger for today (or past due triggers)
-  const activeTrigger = triggers.find(t => todayIST >= t.dateStr);
+  // Select the latest trigger whose date has arrived.
+  // This prevents the 7d trigger from remaining active after Sep 19.
+  const activeTrigger = [...triggers].reverse().find(t => todayIST >= t.dateStr);
   if (!activeTrigger) {
     console.log(`[Countdown] No countdown trigger active for date ${todayIST}.`);
     return tasks;
