@@ -2,8 +2,9 @@ name: TARAS 2K26 Email Automation
 
 on:
   schedule:
-    # Run daily at 02:00 UTC (07:30 AM IST Indian Standard Time)
-    - cron: '0 2 * * *'
+    # Near-real-time polling: every 5 minutes (GitHub Actions minimum schedule interval)
+    # Scheduled workflows use UTC unless a timezone is explicitly configured.
+    - cron: '*/5 * * * *'
   workflow_dispatch:
     inputs:
       mode:
@@ -25,6 +26,12 @@ on:
         required: false
         default: '250'
         type: string
+
+# Prevent overlapping runs from racing on the same email_deliveries state.
+# A queued run waits for the active run instead of cancelling it.
+concurrency:
+  group: taras-2k26-email-automation
+  cancel-in-progress: false
 
 jobs:
   email-automation:
