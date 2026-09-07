@@ -2,9 +2,10 @@ name: TARAS 2K26 Email Automation
 
 on:
   schedule:
-    # Near-real-time polling: every 5 minutes (GitHub Actions minimum schedule interval)
-    # Scheduled workflows use UTC unless a timezone is explicitly configured.
-    - cron: '*/5 * * * *'
+    # Explicit 10-minute intervals for reliable GitHub Actions scheduler execution
+    - cron: '0,10,20,30,40,50 * * * *'
+  repository_dispatch:
+    types: [trigger-email-automation, send-emails]
   workflow_dispatch:
     inputs:
       mode:
@@ -58,8 +59,8 @@ jobs:
           BREVO_SENDER_EMAIL: ${{ secrets.BREVO_SENDER_EMAIL }}
           BREVO_SENDER_NAME: ${{ secrets.BREVO_SENDER_NAME }}
           EMAIL_DAILY_LIMIT: ${{ github.event.inputs.daily_limit || '250' }}
-          # Scheduled runs are LIVE production runs. Manual runs retain their selected mode.
-          EMAIL_DRY_RUN: ${{ (github.event_name != 'schedule' && (github.event.inputs.mode == 'dry_run' || github.event.inputs.mode == '')) && 'true' || 'false' }}
+          # Scheduled and repository_dispatch runs are LIVE production runs. Manual runs retain their selected mode.
+          EMAIL_DRY_RUN: ${{ (github.event_name == 'workflow_dispatch' && (github.event.inputs.mode == 'dry_run' || github.event.inputs.mode == '')) && 'true' || 'false' }}
           EMAIL_TEST_MODE: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'test') && 'true' || 'false' }}
           TEST_EMAIL: ${{ github.event.inputs.test_email }}
         run: |
