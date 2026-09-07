@@ -42,6 +42,7 @@ import {
   X,
   Edit3,
   UserMinus,
+  ExternalLink,
 } from 'lucide-react';
 
 export const ParticipantDashboard: React.FC = () => {
@@ -596,8 +597,8 @@ export const ParticipantDashboard: React.FC = () => {
                       />
                     </div>
 
-                    {!isRev && (
-                      <div className="flex items-center justify-between pt-2 border-t border-white/10 gap-3">
+                    {!isRev ? (
+                      <div className="flex items-center justify-between pt-2 border-t border-white/10 gap-2">
                         <Button
                           variant="outline"
                           size="sm"
@@ -605,7 +606,7 @@ export const ParticipantDashboard: React.FC = () => {
                           icon={<Eye className="w-3.5 h-3.5" />}
                           className="flex-1 justify-center text-xs"
                         >
-                          Preview
+                          View
                         </Button>
                         <CertificateDownloadButton
                           targetRef={{ current: certRefs.current[cId] }}
@@ -614,6 +615,39 @@ export const ParticipantDashboard: React.FC = () => {
                           size="sm"
                           className="flex-1 justify-center text-xs"
                         />
+                        <a
+                          href={`/verify/${cId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex-1"
+                        >
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            icon={<ExternalLink className="w-3.5 h-3.5" />}
+                            className="w-full justify-center text-xs border-[#b91c1c]/40 hover:border-[#b91c1c] text-[#f87171]"
+                          >
+                            Verify
+                          </Button>
+                        </a>
+                      </div>
+                    ) : (
+                      <div className="pt-2 border-t border-white/10">
+                        <a
+                          href={`/verify/${cId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block"
+                        >
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            icon={<ExternalLink className="w-3.5 h-3.5" />}
+                            className="w-full justify-center text-xs border-red-500/30 text-red-400"
+                          >
+                            Check Status
+                          </Button>
+                        </a>
                       </div>
                     )}
                   </div>

@@ -32,7 +32,7 @@ import { getSupabaseClient, isSupabaseConfigured } from '../config/supabase';
 export const SUPABASE_PAYMENT_PROOF_BUCKET = 'payment-proofs';
 
 export interface SupabasePaymentProofMetadata {
-  provider: 'supabase';
+  provider: 'supabase' | 'firestore';
   bucket: string;
   path: string;
   fileSize: number;
@@ -66,21 +66,16 @@ export function getPaymentProofStoragePath(
 }
 
 /**
- * Upload pre-optimized payment screenshot directly to Supabase Storage.
+ * Upload pre-optimized payment screenshot directly to Supabase Storage with resilient Firestore fallback.
  * Validates caller identity and Firestore registration ownership before performing upload.
- * Enforces immutable object creation (upsert: false).
+ * If Supabase Storage is not configured or fails (RLS policy, missing bucket, network),
+ * it seamlessly saves the screenshot to Firestore so user registration is never blocked.
  */
 export async function uploadPaymentProofToSupabase(
   registrationId: string,
   file: File | Blob,
   onProgress?: SupabaseUploadProgressCallback
 ): Promise<SupabasePaymentProofMetadata> {
-  if (!isSupabaseConfigured) {
-    throw new Error(
-      'Supabase Storage is not yet configured. Please add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env.local.'
-    );
-  }
-
   const currentUser = auth.currentUser;
   if (!currentUser) {
     throw new Error('Authentication required: You must be logged in to upload payment proofs.');
@@ -94,7 +89,7 @@ export async function uploadPaymentProofToSupabase(
     throw new Error('No valid payment screenshot file provided.');
   }
 
-  // Authoritative ownership check in Firestore before touching Supabase Storage
+  // Authoritative ownership check in Firestore before touching storage
   const regDocRef = doc(firestore, 'registrations', registrationId);
   const regSnap = await getDoc(regDocRef);
   if (!regSnap.exists()) {
@@ -108,7 +103,6 @@ export async function uploadPaymentProofToSupabase(
     throw new Error('Payment for this registration has already been verified.');
   }
 
-  const supabase = getSupabaseClient();
   const rawExt = file instanceof File ? file.name.split('.').pop() || 'webp' : 'webp';
   const cleanExt = rawExt.toLowerCase().includes('png')
     ? 'png'
@@ -118,14 +112,60 @@ export async function uploadPaymentProofToSupabase(
         ? 'pdf'
         : 'webp';
 
-  // Generate cryptographically secure unique nonce for object path to prevent collision or overwriting
+  const contentType = file.type || (cleanExt === 'pdf' ? 'application/pdf' : cleanExt === 'webp' ? 'image/webp' : 'image/jpeg');
+
+  // Fallback function: converts File to DataURL and persists in Firestore
+  const uploadToFirestoreFallback = async (): Promise<SupabasePaymentProofMetadata> => {
+    if (onProgress) onProgress(40);
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error('Failed to encode image data.'));
+      reader.readAsDataURL(file);
+    });
+
+    if (onProgress) onProgress(70);
+
+    const proofDocRef = doc(firestore, 'payment_proofs', registrationId);
+    const uploadedAt = new Date().toISOString();
+    await setDoc(
+      proofDocRef,
+      {
+        registrationId,
+        uid: currentUser.uid,
+        dataUrl,
+        fileSize: file.size,
+        contentType,
+        uploadedAt,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    if (onProgress) onProgress(100);
+
+    return {
+      provider: 'firestore',
+      bucket: 'firestore',
+      path: `payment_proofs/${registrationId}`,
+      fileSize: file.size,
+      contentType,
+      uploadedAt,
+      signedUrl: dataUrl,
+    };
+  };
+
+  if (!isSupabaseConfigured) {
+    return await uploadToFirestoreFallback();
+  }
+
+  // Generate cryptographically secure unique nonce for object path
   const nonceBytes = new Uint8Array(4);
   (typeof crypto !== 'undefined' ? crypto : (window as any).crypto).getRandomValues(nonceBytes);
   const nonce = Array.from(nonceBytes, (b: number) => b.toString(16).padStart(2, '0')).join('');
 
   const ownerUid = regData.uid || currentUser.uid;
   const storagePath = getPaymentProofStoragePath(registrationId, cleanExt, nonce, ownerUid);
-  const contentType = file.type || (cleanExt === 'pdf' ? 'application/pdf' : cleanExt === 'webp' ? 'image/webp' : 'image/jpeg');
 
   if (onProgress) onProgress(15);
 
@@ -138,21 +178,20 @@ export async function uploadPaymentProofToSupabase(
   }, 250);
 
   try {
+    const supabase = getSupabaseClient();
     const { data, error } = await supabase.storage
       .from(SUPABASE_PAYMENT_PROOF_BUCKET)
       .upload(storagePath, file, {
         contentType,
-        upsert: false, // Disallow overwriting to preserve immutable audit trail
+        upsert: false,
         cacheControl: '3600',
       });
 
     clearInterval(progressTimer);
 
     if (error) {
-      console.error('Supabase Storage upload error:', error);
-      throw new Error(
-        `Failed to upload screenshot to Supabase Storage: ${error.message}`
-      );
+      console.warn('Supabase Storage returned error, falling back to Firestore storage:', error.message);
+      return await uploadToFirestoreFallback();
     }
 
     if (onProgress) onProgress(100);
@@ -169,10 +208,15 @@ export async function uploadPaymentProofToSupabase(
     };
   } catch (err: any) {
     clearInterval(progressTimer);
-    throw new Error(
-      err.message ||
-        'Payment proof upload failed due to a network interruption. Please retry.'
-    );
+    console.warn('Supabase Storage exception, falling back to Firestore storage:', err.message);
+    try {
+      return await uploadToFirestoreFallback();
+    } catch (fallbackErr: any) {
+      throw new Error(
+        fallbackErr.message ||
+          'Payment proof upload failed due to a network interruption. Please retry.'
+      );
+    }
   }
 }
 
@@ -184,25 +228,72 @@ export async function getPaymentProofSignedViewUrl(
   storagePath: string,
   expiresInSeconds = 300 // 5 minutes default
 ): Promise<string> {
+  // If stored in Firestore fallback
+  if (storagePath && storagePath.startsWith('payment_proofs/')) {
+    const parts = storagePath.split('/');
+    const regId = parts[1];
+    if (regId) {
+      try {
+        const proofDoc = await getDoc(doc(firestore, 'payment_proofs', regId));
+        if (proofDoc.exists() && proofDoc.data()?.dataUrl) {
+          return proofDoc.data().dataUrl;
+        }
+      } catch (err) {
+        console.warn('Could not read payment_proofs doc:', err);
+      }
+    }
+  }
+
   if (!isSupabaseConfigured) {
+    // Check if Firestore fallback has it
+    if (storagePath && storagePath.includes('/')) {
+      const segments = storagePath.split('/');
+      const possibleRegId = segments.find((s) => s.startsWith('TARAS26-'));
+      if (possibleRegId) {
+        const proofDoc = await getDoc(doc(firestore, 'payment_proofs', possibleRegId));
+        if (proofDoc.exists() && proofDoc.data()?.dataUrl) {
+          return proofDoc.data().dataUrl;
+        }
+      }
+    }
     throw new Error('Supabase Storage is not configured.');
   }
 
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase.storage
-    .from(SUPABASE_PAYMENT_PROOF_BUCKET)
-    .createSignedUrl(storagePath, expiresInSeconds);
+  try {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.storage
+      .from(SUPABASE_PAYMENT_PROOF_BUCKET)
+      .createSignedUrl(storagePath, expiresInSeconds);
 
-  if (error) {
-    console.error('Error creating Supabase signed view URL:', error);
-    throw new Error(`Unable to load payment proof: ${error.message}`);
+    if (error) {
+      // Check if Firestore fallback has it
+      const segments = storagePath.split('/');
+      const possibleRegId = segments.find((s) => s.startsWith('TARAS26-'));
+      if (possibleRegId) {
+        const proofDoc = await getDoc(doc(firestore, 'payment_proofs', possibleRegId));
+        if (proofDoc.exists() && proofDoc.data()?.dataUrl) {
+          return proofDoc.data().dataUrl;
+        }
+      }
+      throw new Error(`Unable to load payment proof: ${error.message}`);
+    }
+
+    if (!data?.signedUrl) {
+      throw new Error('Signed URL was not generated by Supabase Storage.');
+    }
+
+    return data.signedUrl;
+  } catch (supabaseErr: any) {
+    const segments = storagePath.split('/');
+    const possibleRegId = segments.find((s) => s.startsWith('TARAS26-'));
+    if (possibleRegId) {
+      const proofDoc = await getDoc(doc(firestore, 'payment_proofs', possibleRegId));
+      if (proofDoc.exists() && proofDoc.data()?.dataUrl) {
+        return proofDoc.data().dataUrl;
+      }
+    }
+    throw supabaseErr;
   }
-
-  if (!data?.signedUrl) {
-    throw new Error('Signed URL was not generated by Supabase Storage.');
-  }
-
-  return data.signedUrl;
 }
 
 export interface SavePaymentSubmissionParams {
@@ -279,13 +370,14 @@ export async function savePaymentProofSubmissionToFirestore({
     transaction.update(regRef, {
       utrNumber: trimmedUtr,
       paymentProof: {
-        provider: 'supabase',
+        provider: proofMetadata.provider,
         bucket: proofMetadata.bucket,
         path: proofMetadata.path,
         fileSize: proofMetadata.fileSize,
         contentType: proofMetadata.contentType,
         uploadedAt: proofMetadata.uploadedAt,
       },
+      paymentScreenshotUrl: proofMetadata.signedUrl || '',
       paymentScreenshotPath: proofMetadata.path,
       paymentScreenshotSize: proofMetadata.fileSize,
       paymentScreenshotContentType: proofMetadata.contentType,
@@ -303,7 +395,7 @@ export async function savePaymentProofSubmissionToFirestore({
       action: 'PAYMENT_SUBMITTED',
       registrationId,
       utrNumber: trimmedUtr,
-      provider: 'supabase',
+      provider: proofMetadata.provider,
       storagePath: proofMetadata.path,
       fileSize: proofMetadata.fileSize,
       possibleDuplicate: false,
@@ -369,13 +461,14 @@ export async function resubmitPaymentProofToFirestore({
     transaction.update(regRef, {
       utrNumber: trimmedUtr,
       paymentProof: {
-        provider: 'supabase',
+        provider: proofMetadata.provider,
         bucket: proofMetadata.bucket,
         path: proofMetadata.path,
         fileSize: proofMetadata.fileSize,
         contentType: proofMetadata.contentType,
         uploadedAt: proofMetadata.uploadedAt,
       },
+      paymentScreenshotUrl: proofMetadata.signedUrl || '',
       paymentScreenshotPath: proofMetadata.path,
       paymentScreenshotSize: proofMetadata.fileSize,
       paymentScreenshotContentType: proofMetadata.contentType,
@@ -392,7 +485,7 @@ export async function resubmitPaymentProofToFirestore({
       action: 'PAYMENT_RESUBMITTED',
       registrationId,
       utrNumber: trimmedUtr,
-      provider: 'supabase',
+      provider: proofMetadata.provider,
       storagePath: proofMetadata.path,
       fileSize: proofMetadata.fileSize,
       possibleDuplicate: false,

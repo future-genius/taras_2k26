@@ -282,10 +282,11 @@ export async function createEventRegistration(
     if (!partSnap.exists()) throw new Error('Participant profile not found. Please log in again.');
 
     // For team events, verify team state
+    let teamData: EventTeam | null = null;
     if (teamRef) {
       const teamSnap = await transaction.get(teamRef);
       if (!teamSnap.exists()) throw new Error('Team not found. Please refresh and try again.');
-      const teamData = teamSnap.data() as EventTeam;
+      teamData = teamSnap.data() as EventTeam;
 
       // Verify caller is team leader or member inside transaction
       const isLeaderOrMember =
@@ -306,8 +307,8 @@ export async function createEventRegistration(
       updatedAt: serverTimestamp(),
     });
 
-    // 2. Lock team composition if this is a team event
-    if (teamRef) {
+    // 2. Lock team composition if this is a team event and not yet locked
+    if (teamRef && teamData && !teamData.eventRegistrationStarted) {
       transaction.update(teamRef, {
         eventRegistrationStarted: true,
         status: 'LOCKED',

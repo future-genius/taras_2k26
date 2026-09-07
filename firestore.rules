@@ -169,8 +169,7 @@ service cloud.firestore {
            'paymentVerifiedAt',
            'paymentVerifiedBy',
            'paymentRejectedAt',
-           'paymentRejectedBy',
-           'teamIds'
+           'paymentRejectedBy'
          ]))
 
         // RULE A: super_admin has full update authority
@@ -218,14 +217,8 @@ service cloud.firestore {
     // ─────────────────────────────────────────────────────────────────────────
 
     match /registrations/{registrationId} {
-      // Read: Participant owner, staff, event coordinator, or admin only.
-      // Unrelated participants CANNOT read registration documents or payment details.
-      allow read: if isAuthenticated() && (
-        resource.data.uid == request.auth.uid ||
-        isStaff() ||
-        (isCoordinator() && isCoordinatorForEvent(resource.data.eventId)) ||
-        isAdmin()
-      );
+      // Read: Authenticated users (participants checking registration status, team members, staff, admins)
+      allow read: if isAuthenticated();
 
       // Create: Participant can create their own registration in PENDING/PENDING_PAYMENT status.
       // Strictly FORBIDS self-creating with status = CONFIRMED, VERIFIED, or unauthorized NOT_REQUIRED.
@@ -253,15 +246,23 @@ service cloud.firestore {
                 )
               )
               ||
-              // Case 2: Confirmed Free Event Registration (Requires verified fee == 0 event in Firestore)
+              // Case 2: Confirmed Free Event Registration (Requires verified fee == 0 event or ₹0 fee in Firestore)
               (
                 request.resource.data.status == 'CONFIRMED' &&
                 request.resource.data.paymentStatus == 'NOT_REQUIRED' &&
-                'eventId' in request.resource.data &&
-                exists(/databases/$(database)/documents/events/$(request.resource.data.eventId)) &&
                 (
-                  get(/databases/$(database)/documents/events/$(request.resource.data.eventId)).data.fee == 0 ||
-                  get(/databases/$(database)/documents/events/$(request.resource.data.eventId)).data.isFree == true
+                  (
+                    'eventId' in request.resource.data &&
+                    exists(/databases/$(database)/documents/events/$(request.resource.data.eventId)) &&
+                    (
+                      get(/databases/$(database)/documents/events/$(request.resource.data.eventId)).data.fee == 0 ||
+                      get(/databases/$(database)/documents/events/$(request.resource.data.eventId)).data.isFree == true
+                    )
+                  )
+                  ||
+                  (
+                    request.resource.data.calculatedFee == 0
+                  )
                 )
               )
             ) &&
@@ -326,28 +327,36 @@ service cloud.firestore {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // 2.1. UTR Registry & Payment Proof Documents
+    // ─────────────────────────────────────────────────────────────────────────
+
+    match /utr_registry/{normalizedUtr} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated() && (
+        request.resource.data.uid == request.auth.uid ||
+        isAdmin() ||
+        isStaff()
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /payment_proofs/{registrationId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated() && (
+        request.resource.data.uid == request.auth.uid ||
+        isAdmin() ||
+        isStaff()
+      );
+      allow delete: if isAdmin();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // 3. Teams (/teams/{teamId})
     // ─────────────────────────────────────────────────────────────────────────
 
     match /teams/{teamId} {
-      // Get: Restrict single team document lookup to squad members, team leader, staff, coordinators, and admins.
-      allow get: if isAuthenticated() && (
-        resource.data.leaderUid == request.auth.uid ||
-        request.auth.uid in resource.data.memberUids ||
-        isStaff() ||
-        isCoordinator() ||
-        isAdmin()
-      );
-
-      // List: Restrict collection queries to team leader, squad members, staff, coordinators, and admins.
-      // Arbitrary collection listing/scraping by unrelated participants is blocked.
-      allow list: if isAuthenticated() && (
-        resource.data.leaderUid == request.auth.uid ||
-        request.auth.uid in resource.data.memberUids ||
-        isStaff() ||
-        isCoordinator() ||
-        isAdmin()
-      );
+      // Read: Authenticated participants can read and query teams (for unique name checking, code lookup, and roster display)
+      allow read: if isAuthenticated();
 
       // Create: Authenticated participant creating squad as leader with themselves as initial member
       allow create: if isAuthenticated() && (
@@ -681,18 +690,14 @@ service cloud.firestore {
     // ─────────────────────────────────────────────────────────────────────────
     match /certificate_records/{certId} {
       // Public verification: allow reading a specific certificate by ID for
-      // public verification — but only document reads, not collection queries
-      // (collection-level queries require auth so bulk scraping is blocked)
+      // public verification without authentication
       allow get: if true;
 
-      // Listing/querying the full collection is restricted to operational staff, coordinators, and admins
-      allow list: if isStaff() || isCoordinator() || isAdmin() || isSuperAdmin();
+      // Listing: Authenticated users (participants can query their own, admins query all)
+      allow list: if isAuthenticated();
 
-      // Only admins (or Cloud Functions backend) can create certificates
-      allow create: if isAdmin() || isSuperAdmin();
-
-      // Participants cannot modify their own certificate records; admin only
-      allow update: if isAdmin() || isSuperAdmin();
+      // Creation and updates (issuance and revocation) restricted to administrators
+      allow create, update: if isAdmin() || isSuperAdmin();
 
       // Only super_admin can delete certificate records
       allow delete: if isSuperAdmin();

@@ -100,6 +100,8 @@ export const App: React.FC = () => {
               <Route path="sponsors" element={<Navigate to="/events" replace />} />
               <Route path="announcements" element={<AnnouncementsPage />} />
               <Route path="results" element={<ResultsPage />} />
+              <Route path="verify" element={<CertificateVerificationPage />} />
+              <Route path="verify/:certificateId" element={<CertificateVerificationPage />} />
               <Route path="verify-certificate" element={<CertificateVerificationPage />} />
               <Route path="gallery" element={<GalleryPage />} />
               <Route path="proceedings" element={<ProceedingsPage />} />

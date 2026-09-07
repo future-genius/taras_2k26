@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { getCertificateById } from '../services/certificateService';
 import type { CertificateRecord } from '../types/certificate';
 import { VisualAtmosphere } from '../components/visual/VisualAtmosphere';
 import { Badge } from '../components/common/Badge';
 import { Button } from '../components/common/Button';
+import { CertificatePreview } from '../components/certificates/CertificatePreview';
 import {
   Search,
   CheckCircle2,
@@ -15,15 +16,19 @@ import {
   FileCheck,
   XCircle,
   ShieldCheck,
+  Eye,
+  Mail,
 } from 'lucide-react';
 
 export const CertificateVerificationPage: React.FC = () => {
+  const { certificateId: pathCertId } = useParams<{ certificateId?: string }>();
   const [searchParams] = useSearchParams();
   const [certInput, setCertInput] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
   const [certRecord, setCertRecord] = useState<CertificateRecord | null>(null);
   const [searched, setSearched] = useState(false);
   const [verificationState, setVerificationState] = useState<'VALID' | 'REVOKED' | 'INVALID' | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
 
   const performLookup = async (idToLookup: string) => {
     const cleanId = idToLookup.trim();
@@ -55,14 +60,14 @@ export const CertificateVerificationPage: React.FC = () => {
     }
   };
 
-  // Auto-verify if ID is in URL query parameters
+  // Auto-verify if ID is in path parameter or URL query parameters
   useEffect(() => {
-    const idParam = searchParams.get('id') || searchParams.get('code');
-    if (idParam) {
-      setCertInput(idParam);
-      performLookup(idParam);
+    const idToLookup = pathCertId || searchParams.get('id') || searchParams.get('code');
+    if (idToLookup) {
+      setCertInput(idToLookup);
+      performLookup(idToLookup);
     }
-  }, [searchParams]);
+  }, [pathCertId, searchParams]);
 
   const handleVerify = (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,7 +96,7 @@ export const CertificateVerificationPage: React.FC = () => {
               SYMPOSIUM CREDENTIAL VERIFIER
             </h2>
             <p className="text-xs text-slate-400 font-mono">
-              Enter the unique Certificate ID (e.g. TARAS26-CERT-7F4A92C81D) printed on the credential or QR code.
+              Enter the unique Certificate ID (e.g. TARAS26-CERT-7F4A92C8) printed on the credential or scanned from QR code.
             </p>
           </div>
 
@@ -105,7 +110,7 @@ export const CertificateVerificationPage: React.FC = () => {
                 <input
                   type="text"
                   required
-                  placeholder="e.g. TARAS26-CERT-7F4A92C81D"
+                  placeholder="e.g. TARAS26-CERT-7F4A92C8"
                   value={certInput}
                   onChange={(e) => setCertInput(e.target.value)}
                   className="w-full pl-10 pr-4 py-3.5 bg-[#0a0c10] border border-[#b91c1c]/50 rounded-2xl text-sm font-mono text-white focus:outline-none focus:border-[#b91c1c] focus:ring-1 focus:ring-[#b91c1c]"
@@ -130,71 +135,66 @@ export const CertificateVerificationPage: React.FC = () => {
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-4">
                 <div className="flex items-center gap-2 text-green-400 font-mono font-bold text-sm">
                   <CheckCircle2 className="w-5 h-5 shrink-0" />
-                  <span>✓ VERIFIED CERTIFICATE</span>
+                  <span>VERIFIED GENUINE CERTIFICATE</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  {Boolean((certRecord as any).isDemo || certRecord.participantId === 'TARAS-DEMO-001') && (
-                    <Badge variant="red">DEMO CERTIFICATE &bull; YES</Badge>
-                  )}
                   <Badge variant="green">GENUINE OFFICIAL RECORD</Badge>
                 </div>
               </div>
 
               <div className="space-y-5 text-xs font-mono">
-                <div>
-                  <span className="text-slate-500 block uppercase text-[10px] tracking-wider">Recipient Name:</span>
-                  <span className="text-xl font-black text-white">{certRecord.participantName || certRecord.fullName}</span>
-                </div>
+                <div className="bg-[#0a0c10] p-4 rounded-2xl border border-white/5 space-y-3">
+                  <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                    <span className="text-slate-500 uppercase text-[10px] tracking-wider">Certificate ID</span>
+                    <span className="font-bold text-[#b91c1c] text-sm">{certRecord.certificateId}</span>
+                  </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <span className="text-slate-500 block uppercase text-[10px] tracking-wider">Institution / College:</span>
-                    <span className="text-slate-200 font-bold flex items-center gap-1 mt-0.5">
-                      <Building2 className="w-3.5 h-3.5 text-[#b91c1c]" /> {certRecord.college || 'Saveetha Engineering College'}
+                  <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                    <span className="text-slate-500 uppercase text-[10px] tracking-wider">Participant Name</span>
+                    <span className="text-base font-black text-white">{certRecord.participantName}</span>
+                  </div>
+
+                  <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                    <span className="text-slate-500 uppercase text-[10px] tracking-wider">Institution / College</span>
+                    <span className="text-slate-200 font-bold flex items-center gap-1">
+                      <Building2 className="w-3.5 h-3.5 text-[#b91c1c]" /> {certRecord.collegeName || certRecord.college || 'SRM Valliammai Engineering College'}
                     </span>
                   </div>
 
-                  <div>
-                    <span className="text-slate-500 block uppercase text-[10px] tracking-wider">Certificate Type:</span>
-                    <span className="text-[#b91c1c] font-black text-sm">{certRecord.certificateType}</span>
-                  </div>
-
-                  <div>
-                    <span className="text-slate-500 block uppercase text-[10px] tracking-wider">Event Track:</span>
-                    <span className="text-slate-200 font-bold flex items-center gap-1 mt-0.5">
+                  <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                    <span className="text-slate-500 uppercase text-[10px] tracking-wider">Event Name</span>
+                    <span className="text-amber-400 font-bold flex items-center gap-1">
                       <Award className="w-3.5 h-3.5 text-amber-500" /> {certRecord.eventName}
                     </span>
                   </div>
 
-                  <div>
-                    <span className="text-slate-500 block uppercase text-[10px] tracking-wider">Date of Issue:</span>
-                    <span className="text-slate-200 font-bold flex items-center gap-1 mt-0.5">
-                      <Calendar className="w-3.5 h-3.5 text-cyan-400" />{' '}
-                      {new Date(certRecord.issuedAt || certRecord.issueDate || '').toLocaleDateString('en-US', {
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric',
-                      })}
+                  <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                    <span className="text-slate-500 uppercase text-[10px] tracking-wider">Certificate Type</span>
+                    <span className="text-emerald-400 font-black uppercase">{certRecord.certificateType}</span>
+                  </div>
+
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500 uppercase text-[10px] tracking-wider">Date of Issue</span>
+                    <span className="text-slate-200 font-bold flex items-center gap-1">
+                      <Calendar className="w-3.5 h-3.5 text-cyan-400" /> {certRecord.issueDate}
                     </span>
                   </div>
                 </div>
 
-                {Boolean((certRecord as any).isDemo || certRecord.participantId === 'TARAS-DEMO-001') && (
-                  <div className="p-3 rounded-xl bg-[#1a0000]/70 border border-[#b91c1c]/60 font-mono text-[11px] text-slate-300 flex items-center justify-between">
-                    <span className="text-white font-bold">DEMO / SAMPLE CREDENTIAL:</span>
-                    <span className="text-[#b91c1c] font-bold">YES &bull; ISOLATED TEST RECORD</span>
-                  </div>
-                )}
-
-                {certRecord.achievement && (
-                  <div className="p-3 rounded-xl bg-[#0a0c10] border border-amber-500/30 font-mono">
-                    <span className="text-[10px] text-slate-400 uppercase block">Achievement Recognized:</span>
-                    <span className="text-amber-400 font-bold text-sm">{certRecord.achievement}</span>
-                  </div>
-                )}
+                <div className="pt-2 flex flex-col sm:flex-row items-center gap-3">
+                  <Button
+                    variant="glow"
+                    size="md"
+                    onClick={() => setShowPreview(true)}
+                    icon={<Eye className="w-4 h-4" />}
+                    className="w-full sm:w-auto font-mono text-xs justify-center"
+                  >
+                    View Certificate
+                  </Button>
+                </div>
 
                 <div className="pt-4 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-500">
-                  <span>Certificate ID: <strong className="text-slate-300 font-mono">{certRecord.certificateId || certRecord.certId}</strong></span>
+                  <span>Authorized by: <strong className="text-slate-300 font-mono">TARAS 2K26 Academic Council</strong></span>
                   <span className="flex items-center gap-1 text-slate-400">
                     <ShieldCheck className="w-3.5 h-3.5 text-green-400" /> SRM VALLIAMMAI ECE DEPARTMENT
                   </span>
@@ -204,38 +204,85 @@ export const CertificateVerificationPage: React.FC = () => {
           )}
 
           {/* RESULT 2: REVOKED CERTIFICATE */}
-          {searched && verificationState === 'REVOKED' && (
+          {searched && verificationState === 'REVOKED' && certRecord && (
             <div className="p-6 sm:p-8 rounded-3xl bg-[#1a0000] border-2 border-red-600 space-y-4 animate-fadeIn">
-              <div className="flex items-center gap-2 text-red-500 font-mono font-bold text-sm">
-                <AlertCircle className="w-5 h-5 shrink-0" />
-                <span>⚠ CERTIFICATE REVOKED</span>
-              </div>
-              <p className="text-xs text-slate-200 font-mono leading-relaxed">
-                This certificate record has been <strong className="text-red-400 uppercase">OFFICIALLY REVOKED</strong> by TARAS 2K26 administration. It is no longer valid for any official reference or proof of achievement.
-              </p>
-              {certRecord && (
-                <div className="p-3 rounded-xl bg-black/50 border border-red-900/50 text-[11px] font-mono text-slate-400">
-                  <div>Certificate ID: <span className="text-red-400 font-bold">{certRecord.certificateId || certRecord.certId}</span></div>
-                  <div>Recipient: <span className="text-white">{certRecord.participantName || certRecord.fullName}</span></div>
+              <div className="flex items-center justify-between border-b border-red-900/40 pb-3">
+                <div className="flex items-center gap-2 text-red-500 font-mono font-bold text-sm">
+                  <AlertCircle className="w-5 h-5 shrink-0" />
+                  <span>CERTIFICATE REVOKED</span>
                 </div>
-              )}
+                <Badge variant="red">REVOKED</Badge>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-black/60 border border-red-900/50 space-y-3 font-mono text-xs">
+                <div className="flex justify-between text-slate-400">
+                  <span>Certificate ID:</span>
+                  <span className="text-red-400 font-bold">{certRecord.certificateId}</span>
+                </div>
+                <div className="flex justify-between text-slate-400">
+                  <span>Recipient:</span>
+                  <span className="text-white font-bold">{certRecord.participantName}</span>
+                </div>
+                <div className="flex justify-between text-slate-400">
+                  <span>Event:</span>
+                  <span className="text-slate-300">{certRecord.eventName}</span>
+                </div>
+                {certRecord.revokedReason && (
+                  <div className="flex justify-between text-slate-400 border-t border-red-900/30 pt-2">
+                    <span>Revocation Reason:</span>
+                    <span className="text-amber-400 font-bold">{certRecord.revokedReason}</span>
+                  </div>
+                )}
+                {certRecord.revokedAt && (
+                  <div className="flex justify-between text-slate-400">
+                    <span>Revoked Timestamp:</span>
+                    <span className="text-slate-300">{new Date(certRecord.revokedAt).toLocaleString()}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-red-950/80 border border-red-700/60 font-mono text-xs text-red-200">
+                <strong>Notice:</strong> This credential is no longer valid.
+              </div>
             </div>
           )}
 
-          {/* RESULT 3: INVALID CERTIFICATE */}
+          {/* RESULT 3: NOT FOUND / INVALID CERTIFICATE */}
           {searched && verificationState === 'INVALID' && (
-            <div className="p-6 rounded-3xl bg-[#1a0000] border-2 border-[#b91c1c] space-y-3 animate-fadeIn">
-              <div className="flex items-center gap-2 text-[#b91c1c] font-mono font-bold text-sm">
-                <XCircle className="w-5 h-5 shrink-0 text-[#b91c1c]" />
-                <span>✕ INVALID CERTIFICATE</span>
+            <div className="p-6 sm:p-8 rounded-3xl bg-[#140000] border-2 border-[#b91c1c] space-y-4 animate-fadeIn">
+              <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                <div className="flex items-center gap-2 text-[#b91c1c] font-mono font-bold text-sm">
+                  <XCircle className="w-5 h-5 shrink-0" />
+                  <span>CERTIFICATE NOT FOUND</span>
+                </div>
+                <Badge variant="red">RECORD NOT FOUND</Badge>
               </div>
+
               <p className="text-xs text-white font-mono leading-relaxed">
-                The Certificate ID or code entered was not found in the official TARAS 2K26 registry. Please verify the code printed on the physical credential or scan the original QR code.
+                No valid TARAS 2K26 certificate found for this ID.
               </p>
+
+              <div className="p-4 rounded-2xl bg-[#0a0c10] border border-white/10 font-mono text-xs text-slate-400 space-y-2">
+                <div className="flex items-center gap-2 text-slate-300 font-bold">
+                  <Mail className="w-4 h-4 text-[#b91c1c]" /> Help & Support:
+                </div>
+                <p>
+                  If you believe this is an error, contact symposium support at{' '}
+                  <span className="text-[#b91c1c] font-bold">taras2k26@srmvalliammai.ac.in</span> or verify the ID number entered.
+                </p>
+              </div>
             </div>
           )}
         </div>
       </div>
+
+      {/* Certificate Preview Modal */}
+      {showPreview && certRecord && (
+        <CertificatePreview
+          certificate={certRecord}
+          onClose={() => setShowPreview(false)}
+        />
+      )}
     </div>
   );
 };

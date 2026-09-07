@@ -10,12 +10,12 @@ on:
       mode:
         description: 'Execution Mode'
         required: true
-        default: 'dry_run'
+        default: 'production'
         type: choice
         options:
+          - production
           - dry_run
           - test
-          - production
       test_email:
         description: 'Test recipient email (Required if mode is "test")'
         required: false
