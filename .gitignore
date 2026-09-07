@@ -3,6 +3,8 @@
 .env.*
 !.env.example
 *.local
+*-firebase-adminsdk-*.json
+*.pem
 
 # Logs
 logs
