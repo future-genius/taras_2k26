@@ -53,7 +53,7 @@ export const VenuePage: React.FC = () => {
     {
       id: 'z3',
       name: 'ECE Block — Floor 2',
-      purpose: 'Circuitrix Debugging Lab & Embedded Systems Hackathon',
+      purpose: 'Technical Labs & Prototyping Centers',
       time: '10:30 AM ONWARDS',
       badge: 'FLOOR 2 LABS',
       icon: <ShieldCheck className="w-5 h-5 text-[#ff2b2b]" />,

@@ -5,5 +5,8 @@ export interface RegistrationPaymentConfig {
   bankName: string;
   accountNumber: string;
   ifsc: string;
+  branch?: string;
+  micr?: string;
   paymentInstructions: string[];
 }
+

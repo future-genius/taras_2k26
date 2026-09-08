@@ -91,7 +91,11 @@ export const TimelinePage: React.FC = () => {
         height="compact"
       />
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 font-mono">
+        <div className="p-3 rounded-2xl bg-[#0a0c10] border border-amber-500/40 text-amber-300 text-xs text-center flex items-center justify-center gap-2 mb-6">
+          <span>🔒 OFFICIAL SYMPOSIUM ROADMAP — TIMELINE IS FROZEN IN READ-ONLY STATE</span>
+        </div>
+
         {/* Vertical timeline — dark red connecting line */}
         <div className="relative border-l-2 border-[#b91c1c]/40 ml-4 sm:ml-32 space-y-8 pl-6 sm:pl-10">
           {/* Animated line overlay */}

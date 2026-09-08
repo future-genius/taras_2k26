@@ -60,105 +60,7 @@ export const EVENT_SPECIFIC_CRITERIA: Record<string, ScoreCriterion[]> = {
     },
   ],
 
-  // Circuitrix: Electronic Circuit Debugging
-  'taras-02': [
-    {
-      id: 'c-speed',
-      name: 'Fault Identification Speed',
-      description: 'Rapid troubleshooting and accurate root-cause fault diagnosis.',
-      maxScore: 40,
-    },
-    {
-      id: 'c-accuracy',
-      name: 'Waveform & Voltage Accuracy',
-      description: 'Precision of output signal on oscilloscope and correct voltage levels.',
-      maxScore: 30,
-    },
-    {
-      id: 'c-wiring',
-      name: 'Breadboard Assembly & Wiring Neatness',
-      description: 'Clean IC placement, proper grounding, and minimal parasitic wiring.',
-      maxScore: 20,
-    },
-    {
-      id: 'c-theory',
-      name: 'Theoretical Explanation',
-      description: 'Understanding of component characteristics and circuit laws.',
-      maxScore: 10,
-    },
-  ],
 
-  // ElectraHack: IoT & AI Sprint
-  'taras-03': [
-    {
-      id: 'e-hardware',
-      name: 'Hardware & Sensor Integration',
-      description: 'Interfacing microcontrollers (ESP32/Arduino), sensors, and communication modules.',
-      maxScore: 35,
-    },
-    {
-      id: 'e-proto',
-      name: 'Working Prototype Functionality',
-      description: 'Live sensor data transmission, cloud dashboard, and end-to-end functionality.',
-      maxScore: 35,
-    },
-    {
-      id: 'e-ux',
-      name: 'User Experience & Telemetry',
-      description: 'Dashboard clarity, responsive UI, alerts, and analytics.',
-      maxScore: 15,
-    },
-    {
-      id: 'e-scale',
-      name: 'Scalability & Live Pitch',
-      description: 'Commercial viability, power optimization, and pitch defense.',
-      maxScore: 15,
-    },
-  ],
-
-  // CineMatrix: Non-Technical Cine Quiz
-  'taras-04': [
-    {
-      id: 'm-accuracy',
-      name: 'Trivia & Frame Accuracy',
-      description: 'Correct identification of audio-visual clues, directors, and frame trivia.',
-      maxScore: 50,
-    },
-    {
-      id: 'm-buzzer',
-      name: 'Buzzer Speed & Rapid Fire',
-      description: 'Quick-response reflex and accuracy under timed buzzer rounds.',
-      maxScore: 30,
-    },
-    {
-      id: 'm-clues',
-      name: 'Clue Connection & Theme Synthesis',
-      description: 'Ability to connect subtle cinematic hints and cross-film relationships.',
-      maxScore: 20,
-    },
-  ],
-
-  // Byte Hunt: Cryptic Tech Treasure Hunt
-  'taras-05': [
-    {
-      id: 'b-decrypt',
-      name: 'Cipher & Decryption Speed',
-      description: 'Speed and accuracy in solving cryptographic campus riddles.',
-      maxScore: 40,
-    },
-    {
-      id: 'b-checkpoint',
-      name: 'Checkpoint Navigation & Time',
-      description: 'Chronological checkpoint scans and total course completion time.',
-      maxScore: 35,
-    },
-    {
-      id: 'b-teamwork',
-      name: 'Team Strategy & Integrity',
-      description: 'Adherence to route rules, collaboration, and fair play.',
-      maxScore: 25,
-    },
-  ],
 
   // Doc Ock’s Clue Cartel: Inter-Department Technical Game
   'taras-07': [
@@ -213,6 +115,62 @@ export const EVENT_SPECIFIC_CRITERIA: Record<string, ScoreCriterion[]> = {
       name: 'Team Coordination & Time Management',
       description: 'Coordinated execution under pressure and adherence to time limits.',
       maxScore: 10,
+    },
+  ],
+
+  // Kingpin’s Nexus: Cricket Quiz & Live Player Auction
+  'taras-09': [
+    {
+      id: 'kn-quiz',
+      name: 'Cricket Quiz & Connection Accuracy',
+      description: 'Depth of cricket trivia, player stats, format rules, and conceptual connection speed.',
+      maxScore: 35,
+    },
+    {
+      id: 'kn-budget',
+      name: 'Auction Strategy & Budget Management',
+      description: 'Tactical bidding psychology, purse allocation, and value-for-money bidding execution.',
+      maxScore: 30,
+    },
+    {
+      id: 'kn-squad',
+      name: 'Squad Composition & Balance',
+      description: 'Balanced roster across batsmen, bowlers, all-rounders, and wicket-keepers.',
+      maxScore: 20,
+    },
+    {
+      id: 'kn-decision',
+      name: 'Competitive Decision-Making',
+      description: 'Rapid analytical thinking, adaptability to changing bidding opportunities, and team coordination.',
+      maxScore: 15,
+    },
+  ],
+
+  // Mysterio’s Paradox: Tech Awareness & Mystery Box Clue Challenge
+  'taras-10': [
+    {
+      id: 'mp-tech',
+      name: 'Tech Illusion Awareness & Speed',
+      description: 'Rapid-fire technical & technology awareness accuracy across core engineering, IT, AI, and EV concepts.',
+      maxScore: 35,
+    },
+    {
+      id: 'mp-reframe',
+      name: 'Mystery Box Clue Association & Reframing',
+      description: 'Accuracy in extracting balloon word chits and reframing incomplete sentences into technically sound statements.',
+      maxScore: 30,
+    },
+    {
+      id: 'mp-logic',
+      name: 'Logical Reasoning & Track Selection',
+      description: 'Logical association of clues and strategic track choice (Core vs Coding).',
+      maxScore: 20,
+    },
+    {
+      id: 'mp-time',
+      name: 'Time Efficiency & Accuracy',
+      description: 'Overall speed of completing both Mystery Box attempts and time-based tiebreak standing.',
+      maxScore: 15,
     },
   ],
 };

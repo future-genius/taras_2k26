@@ -31,24 +31,23 @@ export const ContactPage: React.FC = () => {
               </h3>
               <div className="space-y-4 text-xs sm:text-sm text-slate-300">
                 <div>
-                  <strong className="text-white block font-mono text-sm">Faculty Convener</strong>
-                  <span>Dr. G. Uresh Kumar (Associate Professor, Dept of ECE)</span>
+                  <strong className="text-white block font-mono text-sm">Faculty Conveners</strong>
+                  <span>Dr. Komala (HOD/ECE), Dr. G. Uresh Kumar & Dr. C. Amali</span>
                   <div className="flex items-center gap-2 text-[#b91c1c] mt-1 font-mono">
-                    <Mail className="w-3.5 h-3.5" /> ureshkumar.ece@valliammai.edu.in
+                    <Mail className="w-3.5 h-3.5" /> taras2k26@gmail.com
                   </div>
                 </div>
                 <div className="pt-3 border-t border-white/10">
                   <strong className="text-white block font-mono text-sm">Student Council President</strong>
                   <span>R. Kirthivasan (Final Year ECE)</span>
                   <div className="flex items-center gap-2 text-[#b91c1c] mt-1 font-mono">
-                    <Phone className="w-3.5 h-3.5" /> +91 98401 23456
+                    <Phone className="w-3.5 h-3.5" /> +91 88385 13747
                   </div>
                 </div>
                 <div className="pt-3 border-t border-white/10">
-                  <strong className="text-white block font-mono text-sm">Student Council Vice President</strong>
-                  <span>V. Siddharth (Final Year ECE)</span>
-                  <div className="flex items-center gap-2 text-[#b91c1c] mt-1 font-mono">
-                    <Phone className="w-3.5 h-3.5" /> +91 97908 11223
+                  <strong className="text-white block font-mono text-sm">Official Email</strong>
+                  <div className="flex items-center gap-2 text-white mt-1 font-mono font-bold">
+                    <Mail className="w-3.5 h-3.5 text-[#b91c1c]" /> taras2k26@gmail.com
                   </div>
                 </div>
               </div>

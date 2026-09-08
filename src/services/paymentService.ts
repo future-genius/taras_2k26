@@ -12,7 +12,7 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { firestore, storage } from '../config/firebase';
+import { auth, firestore, storage } from '../config/firebase';
 import type { EventRegistration, PaymentStatus } from '../types/registration';
 import type { RegistrationPaymentConfig } from '../types/registrationConfig';
 
@@ -105,19 +105,24 @@ export async function uploadPaymentScreenshot(
   }
 }
 
+export function normalizeTransactionId(rawTxn: string): string {
+  return rawTxn.trim().toUpperCase().replace(/\s+/g, '');
+}
+
 const DEFAULT_PAYMENT_CONFIG: RegistrationPaymentConfig = {
-  upiId: 'taras2k26@upi',
-  payeeName: 'TARAS 2K26 Official',
-  accountName: 'TARAS 2K26 Symposium Account',
-  bankName: 'Indian Bank',
-  accountNumber: '68291047291',
-  ifsc: 'IDIB000S123',
+  upiId: '',
+  payeeName: 'VALLIAMMAI ENGINEERING COLLEGE',
+  accountName: 'VALLIAMMAI ENGINEERING COLLEGE',
+  bankName: 'City Union Bank Ltd',
+  accountNumber: '117109000031450',
+  ifsc: 'CIUB0000117',
+  branch: 'TAMBARAM BRANCH (EXTN COUNTER)',
+  micr: '600054011',
   paymentInstructions: [
-    'Scan the official TARAS UPI QR code using Google Pay, PhonePe, Paytm, BHIM, or any UPI app.',
-    'Pay the exact event registration fee.',
-    'Keep your transaction receipt and copy the 12-digit UTR / Transaction ID.',
-    'Upload a clear screenshot of the successful payment receipt (up to 5 MB accepted).',
-    'Submit for review by the TARAS Registration Team.',
+    'Transfer the exact ₹200 event registration fee via NEFT / RTGS / IMPS / Net Banking to the bank account listed above.',
+    'Copy the official 12-digit UTR / Reference / Transaction ID from your banking app.',
+    'Upload a clear screenshot of the completed transfer receipt (under 1 MB).',
+    'Submit your registration for verification by the TARAS registration team.',
   ],
 };
 
@@ -146,7 +151,7 @@ export async function updatePaymentConfig(config: Partial<RegistrationPaymentCon
 }
 
 /**
- * Submit manual UPI payment proof (Participant)
+ * Submit manual payment proof (Participant)
  */
 export async function submitPaymentProof(
   registrationId: string,
@@ -157,29 +162,43 @@ export async function submitPaymentProof(
   if (!trimmedUtr) throw new Error('UTR / Transaction ID is required.');
   if (!paymentScreenshotUrl) throw new Error('Payment screenshot proof is required.');
 
-  // Check for duplicate UTR submitted across other registrations
-  const regsRef = collection(firestore, 'registrations');
-  const duplicateQuery = query(regsRef, where('utrNumber', '==', trimmedUtr));
-  const duplicateSnap = await getDocs(duplicateQuery);
-
-  let possibleDuplicate = false;
-  for (const documentSnap of duplicateSnap.docs) {
-    if (documentSnap.id !== registrationId) {
-      possibleDuplicate = true;
-      break;
-    }
-  }
-
+  const normalizedTxnId = normalizeTransactionId(trimmedUtr);
+  const usedTxnRef = doc(firestore, 'used_transaction_ids', normalizedTxnId);
   const regRef = doc(firestore, 'registrations', registrationId);
   const now = new Date().toISOString();
 
-  await updateDoc(regRef, {
-    utrNumber: trimmedUtr,
-    paymentScreenshotUrl,
-    paymentSubmittedAt: now,
-    status: 'PAYMENT_VERIFICATION_PENDING',
-    possibleDuplicate,
-    updatedAt: serverTimestamp(),
+  await runTransaction(firestore, async (transaction) => {
+    // 1. Check atomic lock collection
+    const usedTxnSnap = await transaction.get(usedTxnRef);
+    if (usedTxnSnap.exists()) {
+      const existingData = usedTxnSnap.data();
+      if (existingData.registrationId !== registrationId) {
+        throw new Error(
+          'This Transaction ID / UTR has already been submitted for another registration. Transaction IDs must be unique.'
+        );
+      }
+    }
+
+    const regSnap = await transaction.get(regRef);
+    if (!regSnap.exists()) throw new Error('Registration document not found.');
+
+    // 2. Writes
+    transaction.set(usedTxnRef, {
+      transactionId: normalizedTxnId,
+      rawUtr: trimmedUtr,
+      registrationId,
+      submittedByUid: auth.currentUser?.uid || '',
+      submittedAt: serverTimestamp(),
+    });
+
+    transaction.update(regRef, {
+      utrNumber: trimmedUtr,
+      paymentScreenshotUrl,
+      paymentSubmittedAt: now,
+      status: 'PAYMENT_VERIFICATION_PENDING',
+      possibleDuplicate: false,
+      updatedAt: serverTimestamp(),
+    });
   });
 
   // Write immutable audit log
@@ -189,7 +208,7 @@ export async function submitPaymentProof(
       action: 'PAYMENT_SUBMITTED',
       registrationId,
       utrNumber: trimmedUtr,
-      possibleDuplicate,
+      normalizedTxnId,
       timestamp: serverTimestamp(),
     });
   } catch (err) {
@@ -303,28 +322,41 @@ export async function resubmitPaymentProof(
   if (!trimmedUtr) throw new Error('UTR / Transaction ID is required.');
   if (!paymentScreenshotUrl) throw new Error('Payment screenshot proof is required.');
 
-  const regsRef = collection(firestore, 'registrations');
-  const duplicateQuery = query(regsRef, where('utrNumber', '==', trimmedUtr));
-  const duplicateSnap = await getDocs(duplicateQuery);
-
-  let possibleDuplicate = false;
-  for (const documentSnap of duplicateSnap.docs) {
-    if (documentSnap.id !== registrationId) {
-      possibleDuplicate = true;
-      break;
-    }
-  }
-
+  const normalizedTxnId = normalizeTransactionId(trimmedUtr);
+  const usedTxnRef = doc(firestore, 'used_transaction_ids', normalizedTxnId);
   const regRef = doc(firestore, 'registrations', registrationId);
   const now = new Date().toISOString();
 
-  await updateDoc(regRef, {
-    utrNumber: trimmedUtr,
-    paymentScreenshotUrl,
-    paymentSubmittedAt: now,
-    status: 'PAYMENT_VERIFICATION_PENDING',
-    possibleDuplicate,
-    updatedAt: serverTimestamp(),
+  await runTransaction(firestore, async (transaction) => {
+    const usedTxnSnap = await transaction.get(usedTxnRef);
+    if (usedTxnSnap.exists()) {
+      const existingData = usedTxnSnap.data();
+      if (existingData.registrationId !== registrationId) {
+        throw new Error(
+          'This Transaction ID / UTR has already been submitted for another registration. Transaction IDs must be unique.'
+        );
+      }
+    }
+
+    const regSnap = await transaction.get(regRef);
+    if (!regSnap.exists()) throw new Error('Registration document not found.');
+
+    transaction.set(usedTxnRef, {
+      transactionId: normalizedTxnId,
+      rawUtr: trimmedUtr,
+      registrationId,
+      submittedByUid: auth.currentUser?.uid || '',
+      submittedAt: serverTimestamp(),
+    });
+
+    transaction.update(regRef, {
+      utrNumber: trimmedUtr,
+      paymentScreenshotUrl,
+      paymentSubmittedAt: now,
+      status: 'PAYMENT_VERIFICATION_PENDING',
+      possibleDuplicate: false,
+      updatedAt: serverTimestamp(),
+    });
   });
 
   // Audit Log
@@ -334,7 +366,7 @@ export async function resubmitPaymentProof(
       action: 'PAYMENT_RESUBMITTED',
       registrationId,
       utrNumber: trimmedUtr,
-      possibleDuplicate,
+      normalizedTxnId,
       timestamp: serverTimestamp(),
     });
   } catch (err) {

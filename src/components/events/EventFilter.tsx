@@ -22,7 +22,6 @@ export const EventFilter: React.FC<EventFilterProps> = ({
     { id: 'ALL', label: 'All Tracks' },
     { id: 'TECHNICAL', label: 'Technical' },
     { id: 'NON_TECHNICAL', label: 'Non-Technical' },
-    { id: 'WORKSHOP', label: 'Workshops' },
   ];
 
   const types = [

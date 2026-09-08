@@ -20,7 +20,6 @@ const VenuePage             = lazy(() => import('./pages/VenuePage').then(m => (
 const AnnouncementsPage     = lazy(() => import('./pages/AnnouncementsPage').then(m => ({ default: m.AnnouncementsPage })));
 const ResultsPage           = lazy(() => import('./pages/ResultsPage').then(m => ({ default: m.ResultsPage })));
 const GalleryPage           = lazy(() => import('./pages/GalleryPage').then(m => ({ default: m.GalleryPage })));
-const ProceedingsPage       = lazy(() => import('./pages/ProceedingsPage').then(m => ({ default: m.ProceedingsPage })));
 const ContactPage           = lazy(() => import('./pages/ContactPage').then(m => ({ default: m.ContactPage })));
 const NotFoundPage          = lazy(() => import('./pages/NotFoundPage').then(m => ({ default: m.NotFoundPage })));
 const AccessDeniedPage      = lazy(() => import('./pages/AccessDeniedPage').then(m => ({ default: m.AccessDeniedPage })));
@@ -104,7 +103,6 @@ export const App: React.FC = () => {
               <Route path="verify/:certificateId" element={<CertificateVerificationPage />} />
               <Route path="verify-certificate" element={<CertificateVerificationPage />} />
               <Route path="gallery" element={<GalleryPage />} />
-              <Route path="proceedings" element={<ProceedingsPage />} />
               <Route path="contact" element={<ContactPage />} />
               <Route path="access-denied" element={<AccessDeniedPage />} />
 

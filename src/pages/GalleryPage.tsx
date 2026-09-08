@@ -23,6 +23,12 @@ export const GalleryPage: React.FC = () => {
         height="compact"
       />
 
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+        <div className="p-3 rounded-2xl bg-[#0a0c10] border border-amber-500/40 text-amber-300 text-xs font-mono text-center flex items-center justify-center gap-2">
+          <span>🔒 OFFICIAL ARCHIVE — GALLERY IS FROZEN IN READ-ONLY STATE</span>
+        </div>
+      </div>
+
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
         {/* Category Pills */}
         <div className="flex flex-wrap justify-center gap-2">

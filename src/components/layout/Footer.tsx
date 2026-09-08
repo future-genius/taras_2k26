@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Shield, Mail, Phone, MapPin, ExternalLink } from 'lucide-react';
+import { Mail, MapPin, ExternalLink } from 'lucide-react';
 
 export const Footer: React.FC = () => {
   return (
@@ -69,7 +69,6 @@ export const Footer: React.FC = () => {
                 { to: '/rules', label: 'Rules & Regulations' },
                 { to: '/faq', label: 'Categorized FAQ' },
                 { to: '/venue', label: 'Campus Map & Directions' },
-                { to: '/proceedings', label: 'Paper Archives & ISBN' },
                 { to: '/results', label: 'Symposium Podium' },
               ].map((l) => (
                 <li key={l.to}>
@@ -91,11 +90,7 @@ export const Footer: React.FC = () => {
               </li>
               <li className="flex items-center gap-2">
                 <Mail className="w-3.5 h-3.5 text-[#7f1d1d] shrink-0" />
-                <span>taras2k26@valliammai.edu.in</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <Phone className="w-3.5 h-3.5 text-[#7f1d1d] shrink-0" />
-                <span>+91 98401 23456</span>
+                <span>taras2k26@gmail.com</span>
               </li>
               <li>
                 <a

@@ -581,7 +581,25 @@ service cloud.firestore {
         isCoordinatorForEvent(resource.data.eventId)
       );
 
-      allow write: if isAdmin();
+      allow write: if isAdmin() || (
+        isCoordinator() &&
+        isCoordinatorForEvent(request.resource.data.eventId)
+      );
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 7. Atomic Used Transaction IDs Lock (/used_transaction_ids/{normalizedTxnId})
+    // ─────────────────────────────────────────────────────────────────────────
+
+    match /used_transaction_ids/{normalizedTxnId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && (
+        request.resource.data.submittedByUid == request.auth.uid || isAdmin() || isStaff()
+      );
+      allow update: if isAuthenticated() && (
+        resource.data.submittedByUid == request.auth.uid || isAdmin() || isStaff()
+      );
+      allow delete: if isAdmin();
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -593,10 +611,12 @@ service cloud.firestore {
       // Read: Admin and super_admin
       allow read: if isAdmin();
 
-      // Create: Authorized operational roles ONLY (staff, coordinator, admin)
-      // Participants are STRICTLY FORBIDDEN from creating audit logs
+      // Create: Authorized operational roles or participants logging payment submissions
       allow create: if isAuthenticated() &&
-        (isStaff() || isCoordinator() || isAdmin()) &&
+        (
+          isStaff() || isCoordinator() || isAdmin() ||
+          ('action' in request.resource.data && request.resource.data.action in ['PAYMENT_SUBMITTED', 'PAYMENT_RESUBMITTED'])
+        ) &&
         (!('actorUid' in request.resource.data) || request.resource.data.actorUid == request.auth.uid);
 
       // Update / Delete: PERMANENTLY FORBIDDEN — audit trail is immutable

@@ -26,7 +26,6 @@ const COMMANDS: CommandItem[] = [
   { id: 'announcements', label: 'Announcements', description: 'Live updates feed', path: '/announcements', icon: <Radio className="w-4 h-4" /> },
   { id: 'results', label: 'Results', description: 'Winners & podium declarations', path: '/results', icon: <Trophy className="w-4 h-4" /> },
   { id: 'gallery', label: 'Gallery', description: 'Photo archive', path: '/gallery', icon: <Image className="w-4 h-4" /> },
-  { id: 'proceedings', label: 'Proceedings', description: 'ISBN papers & e-souvenir', path: '/proceedings', icon: <FileText className="w-4 h-4" /> },
   { id: 'contact', label: 'Contact', description: 'Reach the organizing team', path: '/contact', icon: <Phone className="w-4 h-4" /> },
   { id: 'admin', label: 'Admin Command Center', description: 'Phase 3 Master Command & Network Node Topology', path: '/announcements', icon: <Shield className="w-4 h-4 text-[#b91c1c]" /> },
 ];

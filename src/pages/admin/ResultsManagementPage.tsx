@@ -35,8 +35,15 @@ import {
 } from 'lucide-react';
 
 export const ResultsManagementPage: React.FC = () => {
-  const { user } = useAuth();
-  const [selectedEventId, setSelectedEventId] = useState<string>(MOCK_EVENTS[0].id);
+  const { user, assignedEventIds = [], role } = useAuth();
+
+  const availableEvents = MOCK_EVENTS.filter((e) => {
+    if (role === 'super_admin' || role === 'admin' || role === 'PRESIDENT') return true;
+    if (assignedEventIds && assignedEventIds.length > 0) return assignedEventIds.includes(e.id);
+    return true;
+  });
+
+  const [selectedEventId, setSelectedEventId] = useState<string>(availableEvents[0]?.id || MOCK_EVENTS[0].id);
   const [scorecards, setScorecards] = useState<Scorecard[]>([]);
   const [publishedResults, setPublishedResults] = useState<EventResult[]>([]);
   const [issuedCerts, setIssuedCerts] = useState<CertificateRecord[]>([]);
@@ -53,7 +60,7 @@ export const ResultsManagementPage: React.FC = () => {
   const [isPublishing, setIsPublishing] = useState(false);
   const [isIssuingCerts, setIsIssuingCerts] = useState(false);
 
-  const currentEvent = MOCK_EVENTS.find((e) => e.id === selectedEventId) || MOCK_EVENTS[0];
+  const currentEvent = availableEvents.find((e) => e.id === selectedEventId) || availableEvents[0] || MOCK_EVENTS[0];
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -274,7 +281,7 @@ export const ResultsManagementPage: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar">
-            {MOCK_EVENTS.map((ev) => {
+            {availableEvents.map((ev) => {
               const hasPublished = publishedResults.some((r) => r.eventId === ev.id && r.status === 'PUBLISHED');
               return (
                 <button

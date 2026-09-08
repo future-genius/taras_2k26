@@ -247,14 +247,12 @@ async function recordDelivery(
  */
 const OFFICIAL_EVENTS_CATALOG: Record<string, string> = {
   'taras-01': 'Paper-X-Verse',
-  'taras-02': 'Circuitrix',
-  'taras-03': 'ElectraHack (IoT & AI Sprint)',
-  'taras-04': 'CineMatrix',
-  'taras-05': 'Byte Hunt (Tech Treasure Hunt)',
-  'taras-06': 'VLSI Architect Workshop',
   'taras-07': 'Doc Ock’s Clue Cartel',
   'taras-08': 'Knull’s Void',
-  'circuit-debugging': 'Circuit Debugging',
+  'taras-09': 'Kingpin’s Nexus',
+  'kingpins-nexus': 'Kingpin’s Nexus',
+  'taras-10': 'Mysterio’s Paradox',
+  'mysterios-paradox': 'Mysterio’s Paradox',
   'hackathon': 'AI Hackathon'
 };
 

@@ -173,7 +173,7 @@ export async function processServerEmailJob(
               Authorization: `Bearer ${resendApiKey}`,
             },
             body: JSON.stringify({
-              from: 'TARAS 2K26 <no-reply@taras2k26.sec.ac.in>',
+              from: 'TARAS 2K26 <taras2k26@gmail.com>',
               to: [rec.email],
               subject: pSubject,
               text: pBody,

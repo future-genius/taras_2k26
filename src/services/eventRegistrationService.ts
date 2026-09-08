@@ -32,9 +32,10 @@ import {
 import { auth, firestore } from '../config/firebase';
 import type { EventRegistration, PaymentStatus } from '../types/registration';
 import type { EventTeam } from '../types/team';
+import { isInternalStudent } from '../utils/college';
 
-/** ₹150 per person — authoritative constant, never sourced from client */
-export const BASE_FEE_PER_PERSON = 150;
+/** ₹200 per event registration — authoritative constant */
+export const BASE_FEE_PER_PERSON = 200;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Payment Status Queries (Firestore-sourced, never localStorage)
@@ -209,9 +210,16 @@ export async function createEventRegistration(
     }
   }
 
-  // ── 2. Determine member count & fee ─────────────────────────────────────
+  // ── 2. Determine member count & 3-event limit ───────────────────────────
   const teamId = team?.teamId;
   const teamMemberCount = team?.memberCount ?? 1;
+
+  // Check 3-event limit
+  const userRegs = await getParticipantRegistrations(effectiveUid);
+  const activeUserRegs = userRegs.filter((r) => r.status !== 'CANCELLED' && r.status !== 'REJECTED');
+  if (activeUserRegs.length >= 3) {
+    throw new Error('Maximum limit of 3 registered events reached. You cannot register for more than 3 events.');
+  }
 
   // Duplicate registration check (pre-transaction for UX — Firestore transaction will double-check)
   if (teamId) {
@@ -233,13 +241,6 @@ export async function createEventRegistration(
     }
   }
 
-  // Determine fee from Firestore (NEVER from browser-provided value)
-  const feeInfo = teamId
-    ? await calculateEventFee(teamId, teamMemberCount)
-    : { fee: BASE_FEE_PER_PERSON, isFirstPayment: true, feePerPerson: BASE_FEE_PER_PERSON };
-
-  const { fee: calculatedFee, isFirstPayment, feePerPerson } = feeInfo;
-
   // ── 3. Determine registration ID ─────────────────────────────────────────
   const registrationId = generateRegistrationId(eventId);
   const regRef = doc(firestore, 'registrations', registrationId);
@@ -248,38 +249,53 @@ export async function createEventRegistration(
 
   // ── 4. Atomic Firestore Transaction ──────────────────────────────────────
   const now = new Date().toISOString();
-
-  const paymentStatus: PaymentStatus = calculatedFee === 0 ? 'NOT_REQUIRED' : 'PENDING';
-  const registrationStatus = calculatedFee === 0 ? 'CONFIRMED' : 'PENDING_PAYMENT';
-
-  const newReg: EventRegistration = {
-    registrationId,
-    participantId,
-    uid: effectiveUid,
-    eventId,
-    eventName,
-    category: eventCategory,
-    isTeamEvent,
-    ...(teamId && { teamId }),
-    ...(team && { teamName: team.teamName }),
-    teamMemberCount: isTeamEvent ? teamMemberCount : 1,
-    feePerPerson,
-    calculatedFee,
-    isFirstPayment,
-    feeAmount: calculatedFee, // backward compat field
-    status: registrationStatus,
-    paymentStatus,
-    registeredAt: now,
-    venueCheckInRequired: true,
-    eventAttendance: 'NOT_MARKED',
-    shortlistStatus: 'NOT_EVALUATED',
-    certificateEligible: false,
-  };
+  let createdReg: EventRegistration | null = null;
 
   await runTransaction(firestore, async (transaction) => {
     // ── READ ALL FIRST (Firestore transaction requirement) ──
     const partSnap = await transaction.get(participantRef);
     if (!partSnap.exists()) throw new Error('Participant profile not found. Please log in again.');
+    const partData = partSnap.data();
+
+    // Check Internal Student Eligibility
+    const isInternal = isInternalStudent(partData.college);
+    if (isInternal && eventId !== 'taras-01') {
+      throw new Error(
+        'Internal college students are allowed to register ONLY for the Paper Presentation event.'
+      );
+    }
+
+    // Determine fee: Internal Paper Presentation = ₹0 (Free); All other paid registrations = ₹200
+    const calculatedFee = (isInternal && eventId === 'taras-01') ? 0 : BASE_FEE_PER_PERSON;
+    const feePerPerson = BASE_FEE_PER_PERSON;
+    const isFirstPayment = true;
+
+    const paymentStatus: PaymentStatus = calculatedFee === 0 ? 'NOT_REQUIRED' : 'PENDING';
+    const registrationStatus = calculatedFee === 0 ? 'CONFIRMED' : 'PENDING_PAYMENT';
+
+    createdReg = {
+      registrationId,
+      participantId,
+      uid: effectiveUid,
+      eventId,
+      eventName,
+      category: eventCategory,
+      isTeamEvent,
+      ...(teamId && { teamId }),
+      ...(team && { teamName: team.teamName }),
+      teamMemberCount: isTeamEvent ? teamMemberCount : 1,
+      feePerPerson,
+      calculatedFee,
+      isFirstPayment,
+      feeAmount: calculatedFee,
+      status: registrationStatus,
+      paymentStatus,
+      registeredAt: now,
+      venueCheckInRequired: true,
+      eventAttendance: 'NOT_MARKED',
+      shortlistStatus: 'NOT_EVALUATED',
+      certificateEligible: false,
+    };
 
     // For team events, verify team state
     let teamData: EventTeam | null = null;
@@ -302,7 +318,7 @@ export async function createEventRegistration(
 
     // 1. Create registration document
     transaction.set(regRef, {
-      ...newReg,
+      ...createdReg,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
@@ -318,7 +334,7 @@ export async function createEventRegistration(
     }
   });
 
-  return newReg;
+  return createdReg!;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

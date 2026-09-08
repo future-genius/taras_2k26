@@ -1,21 +1,15 @@
 /**
  * TARAS 2K26 — Registration Wizard Modal
  *
- * FIXED WORKFLOW:
- * 1. Step 1 (Participation): Show team info + calculated fee. On "Continue":
- *    → createEventRegistration() writes to Firestore FIRST (atomic transaction)
- *    → If fee = 0 (team already has verified payment): skip to Step 3 (Confirmed)
- *    → If fee > 0: navigate to Step 2 (Payment)
- *
- * 2. Step 2 (Payment): UPI QR + UTR + Screenshot upload → submitPaymentProof()
- *
- * 3. Step 3 (Submitted): Payment under review confirmation
- *    Or if ₹0: instant confirmation
- *
- * FEE MODEL:
- * - First event registration: teamMemberCount × ₹150 (Firestore-sourced)
- * - Subsequent events (same team, verified payment exists): ₹0
- * - NEVER sourced from client state, URL params, or localStorage
+ * WORKFLOW:
+ * 1. Step 1 (Participation): Show team/participant info & registration fee.
+ *    - Internal Students: Allowed ONLY for Paper Presentation (taras-01), ₹0 fee (Free).
+ *    - External Students / Paid registrations: Fixed ₹200 fee.
+ *    - Max 3 events total per participant/team.
+ * 2. Step 2 (Bank Transfer Payment):
+ *    - Official City Union Bank details display.
+ *    - UTR / Transaction ID input + Screenshot upload (under 1 MB).
+ * 3. Step 3 (Confirmed / Pending Review): Confirmation screen.
  */
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -31,7 +25,8 @@ import {
   type PaymentProofUploaderRef,
   type UploadState,
 } from './PaymentProofUploader';
-import { createEventRegistration, calculateEventFee } from '../../services/eventRegistrationService';
+import { createEventRegistration, getParticipantRegistrations } from '../../services/eventRegistrationService';
+import { isInternalStudent } from '../../utils/college';
 import type { TARASEvent } from '../../types/event';
 import type { EventTeam } from '../../types/team';
 import type { RegistrationPaymentConfig } from '../../types/registrationConfig';
@@ -39,15 +34,13 @@ import type { EventRegistration } from '../../types/registration';
 import { Modal } from '../common/Modal';
 import { Button } from '../common/Button';
 import { Badge } from '../common/Badge';
-import { QRCodeSVG } from 'qrcode.react';
 import {
   ShieldCheck,
-  QrCode,
+  Building2,
   Copy,
   Check,
   CheckCircle2,
   AlertCircle,
-  Upload,
   Lock,
   ArrowRight,
   ArrowLeft,
@@ -75,21 +68,21 @@ export const RegistrationWizardModal: React.FC<RegistrationWizardModalProps> = (
   const { user, participantProfile } = useAuth();
   const navigate = useNavigate();
 
-  // Current UID (prefer authoritative Firebase Auth UID)
   const currentUid = user?.uid || participantProfile?.uid || '';
+  const isInternal = isInternalStudent(participantProfile?.college);
+  const isPaperPresentation = event.id === 'taras-01';
 
   // Step state
   const [step, setStep] = useState<1 | 2 | 3>(existingRegistration ? 2 : 1);
   const [paymentConfig, setPaymentConfig] = useState<RegistrationPaymentConfig | null>(null);
-  const [copiedUpi, setCopiedUpi] = useState(false);
+  const [copiedBankInfo, setCopiedBankInfo] = useState(false);
 
   // Selected team ID state if participant has multiple teams
   const [selectedTeamId, setSelectedTeamId] = useState<string>('');
 
   // Registration result state
   const [createdReg, setCreatedReg] = useState<EventRegistration | null>(existingRegistration || null);
-  const [feeInfo, setFeeInfo] = useState<{ fee: number; isFirstPayment: boolean } | null>(null);
-  const [feeLoading, setFeeLoading] = useState(false);
+  const [registeredEventCount, setRegisteredEventCount] = useState<number>(0);
 
   // Payment proof state
   const [utrInput, setUtrInput] = useState(existingRegistration?.utrNumber || '');
@@ -112,7 +105,6 @@ export const RegistrationWizardModal: React.FC<RegistrationWizardModalProps> = (
       )
     : [];
 
-  // Pick team: explicitly selected, OR prioritize team where user is captain, OR first team
   const eligibleTeam = isTeamEvent
     ? (selectedTeamId ? myTeams.find((t) => t.teamId === selectedTeamId) : null) ||
       myTeams.find(
@@ -130,19 +122,20 @@ export const RegistrationWizardModal: React.FC<RegistrationWizardModalProps> = (
       (eligibleTeam.members?.some((m) => m.isLeader && (m.uid === currentUid || m.uid === participantProfile?.uid)))
     : false;
 
-  // Effective fee for display
-  const displayFee = createdReg?.calculatedFee ?? feeInfo?.fee ?? null;
-  const isZeroFee = displayFee === 0;
-
-  // UPI payment URI
-  const regIdForUpi = createdReg?.registrationId || 'TARAS2K26';
-  const upiUri = paymentConfig
-    ? `upi://pay?pa=${paymentConfig.upiId}&pn=${encodeURIComponent(paymentConfig.payeeName)}&am=${displayFee}&cu=INR&tn=${encodeURIComponent(regIdForUpi)}`
-    : `upi://pay?pa=taras2k26@upi&pn=TARAS2K26&am=${displayFee || 0}&cu=INR`;
+  // Fee calculation
+  const calculatedFee = (isInternal && isPaperPresentation) ? 0 : 200;
+  const isZeroFee = (createdReg?.calculatedFee ?? calculatedFee) === 0;
 
   useEffect(() => {
     if (!isOpen) return;
     getPaymentConfig().then(setPaymentConfig).catch(() => null);
+
+    if (currentUid) {
+      getParticipantRegistrations(currentUid).then((regs) => {
+        const active = regs.filter((r) => r.status !== 'CANCELLED' && r.status !== 'REJECTED');
+        setRegisteredEventCount(active.length);
+      }).catch(() => null);
+    }
 
     if (existingRegistration) {
       setStep(2);
@@ -151,32 +144,10 @@ export const RegistrationWizardModal: React.FC<RegistrationWizardModalProps> = (
       return;
     }
 
-    // Reset for fresh open
     setStep(1);
     setErrorMsg(null);
     setCreatedReg(null);
-
-    // Pre-fetch fee estimate so user sees it before clicking Continue
-    const fetchFeeEstimate = async () => {
-      if (!eligibleTeam) return;
-      setFeeLoading(true);
-      try {
-        const info = await calculateEventFee(eligibleTeam.teamId, eligibleTeam.memberCount);
-        setFeeInfo(info);
-      } catch {
-        // Non-fatal — actual fee is determined at createEventRegistration time
-      } finally {
-        setFeeLoading(false);
-      }
-    };
-
-    fetchFeeEstimate();
-  }, [isOpen, existingRegistration, eligibleTeam?.teamId]);
-
-  // ─────────────────────────────────────────────────────────────────────────────
-  // STEP 1: Continue to Payment (THE CRITICAL FIX)
-  // Registration document is written to Firestore FIRST before navigating.
-  // ─────────────────────────────────────────────────────────────────────────────
+  }, [isOpen, existingRegistration, currentUid]);
 
   const handleStep1Continue = async () => {
     if (!participantProfile) {
@@ -184,7 +155,16 @@ export const RegistrationWizardModal: React.FC<RegistrationWizardModalProps> = (
       return;
     }
 
-    // Team event validations
+    if (isInternal && !isPaperPresentation) {
+      setErrorMsg('Internal college students are allowed to register ONLY for the Paper Presentation event.');
+      return;
+    }
+
+    if (registeredEventCount >= 3) {
+      setErrorMsg('Maximum limit of 3 registered events reached. You cannot register for more than 3 events.');
+      return;
+    }
+
     if (isTeamEvent) {
       if (!eligibleTeam) {
         setErrorMsg(
@@ -203,7 +183,7 @@ export const RegistrationWizardModal: React.FC<RegistrationWizardModalProps> = (
 
       if (eligibleTeam.members.length < eligibleTeam.minTeamSize) {
         setErrorMsg(
-          `Team size requirement not met. Minimum ${eligibleTeam.minTeamSize} members required, but only ${eligibleTeam.members.length} have joined. Share your team code for members to join.`
+          `Team size requirement not met. Minimum ${eligibleTeam.minTeamSize} members required, but only ${eligibleTeam.members.length} have joined.`
         );
         return;
       }
@@ -217,7 +197,6 @@ export const RegistrationWizardModal: React.FC<RegistrationWizardModalProps> = (
         event.category === 'NON-TECHNICAL' ? 'NON_TECHNICAL' : event.category
       ) as EventRegistration['category'];
 
-      // ── CRITICAL: Write registration to Firestore BEFORE any navigation ──
       const registration = await createEventRegistration({
         uid: currentUid,
         participantId: participantProfile.participantId,
@@ -230,12 +209,9 @@ export const RegistrationWizardModal: React.FC<RegistrationWizardModalProps> = (
 
       setCreatedReg(registration);
 
-      // Route based on fee
       if (registration.calculatedFee === 0) {
-        // ₹0 — team already has verified payment → instantly confirmed
         setStep(3);
       } else {
-        // Has fee → show payment page
         setStep(2);
       }
     } catch (err: any) {
@@ -245,15 +221,11 @@ export const RegistrationWizardModal: React.FC<RegistrationWizardModalProps> = (
     }
   };
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // STEP 2: Payment proof submission
-  // ─────────────────────────────────────────────────────────────────────────────
-
-  const handleCopyUpi = () => {
-    if (!paymentConfig) return;
-    navigator.clipboard.writeText(paymentConfig.upiId);
-    setCopiedUpi(true);
-    setTimeout(() => setCopiedUpi(false), 2500);
+  const handleCopyBankDetails = () => {
+    const text = `Account Name: VALLIAMMAI ENGINEERING COLLEGE\nBank: City Union Bank Ltd\nAccount No: 117109000031450\nIFSC: CIUB0000117\nBranch: TAMBARAM BRANCH (EXTN COUNTER)`;
+    navigator.clipboard.writeText(text);
+    setCopiedBankInfo(true);
+    setTimeout(() => setCopiedBankInfo(false), 2500);
   };
 
   const handlePaymentSubmit = async (e: React.FormEvent) => {
@@ -279,10 +251,8 @@ export const RegistrationWizardModal: React.FC<RegistrationWizardModalProps> = (
     try {
       const regId = createdReg.registrationId;
 
-      // 1. Upload pre-optimized screenshot (with real-time progress)
       const uploadResult = await uploaderRef.current.upload();
 
-      // 2. Atomically persist metadata & transition status to PAYMENT_VERIFICATION_PENDING in Firestore
       if (existingRegistration?.paymentStatus === 'REJECTED') {
         await resubmitPaymentProofToFirestore({
           registrationId: regId,
@@ -302,16 +272,12 @@ export const RegistrationWizardModal: React.FC<RegistrationWizardModalProps> = (
       console.error('Payment submission failed:', err);
       setErrorMsg(
         err.message ||
-          'Upload failed. Your registration is still saved. Please retry the payment proof upload.'
+          'Submission failed. Your registration is saved. Please retry uploading the screenshot.'
       );
     } finally {
       setIsSubmitting(false);
     }
   };
-
-  // ─────────────────────────────────────────────────────────────────────────────
-  // RENDER
-  // ─────────────────────────────────────────────────────────────────────────────
 
   const stepCount = isZeroFee ? 2 : 2;
 
@@ -322,7 +288,7 @@ export const RegistrationWizardModal: React.FC<RegistrationWizardModalProps> = (
       title={`TARAS 2K26 REGISTRATION — STEP ${step} OF ${stepCount}`}
     >
       <div className="space-y-6 font-mono text-xs">
-        {/* Step Indicator Bar */}
+        {/* Step Indicator */}
         <div className="flex items-center justify-between border-b border-white/10 pb-3">
           <div className="flex items-center gap-2">
             <span
@@ -346,10 +312,21 @@ export const RegistrationWizardModal: React.FC<RegistrationWizardModalProps> = (
               {isZeroFee ? '✓' : '2'}
             </span>
             <span className={step >= 2 ? 'text-white font-bold' : 'text-slate-500'}>
-              {isZeroFee ? 'CONFIRMED' : 'PAYMENT'}
+              {isZeroFee ? 'CONFIRMED' : 'BANK PAYMENT'}
             </span>
           </div>
         </div>
+
+        {/* Internal Student Restricted Banner */}
+        {isInternal && !isPaperPresentation && (
+          <div className="p-3.5 rounded-2xl bg-amber-950/40 border border-amber-500/60 text-amber-200 flex items-start gap-2.5">
+            <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+            <div>
+              <strong className="block text-white">INTERNAL STUDENT ELIGIBILITY NOTICE</strong>
+              Internal college students (VEC / SRM VEC) are allowed to register <strong>ONLY for the Paper Presentation event</strong> (Paper-X-Verse). Registration for this non-paper event is restricted.
+            </div>
+          </div>
+        )}
 
         {/* Error Message */}
         {errorMsg && (
@@ -383,25 +360,21 @@ export const RegistrationWizardModal: React.FC<RegistrationWizardModalProps> = (
                 <h4 className="text-lg font-black text-white">{event.name}</h4>
                 <p className="text-slate-400 text-[11px]">{event.shortDescription}</p>
               </div>
+
               {/* Fee Display */}
               <div className="flex items-center justify-between pt-2 border-t border-white/10">
                 <span className="text-slate-400">Registration Fee:</span>
                 <div className="text-right">
-                  {feeLoading ? (
-                    <span className="text-slate-500 text-xs">Calculating…</span>
-                  ) : feeInfo !== null ? (
+                  {isInternal && isPaperPresentation ? (
                     <div>
-                      <span className={`text-xl font-extrabold ${feeInfo.fee === 0 ? 'text-green-400' : 'text-[#b91c1c]'}`}>
-                        {feeInfo.fee === 0 ? '₹0' : `₹${feeInfo.fee}`}
-                      </span>
-                      <span className="text-[10px] text-slate-500 block">
-                        {feeInfo.fee === 0
-                          ? 'Free — team already paid'
-                          : `₹150 × ${eligibleTeam?.memberCount || '?'} members`}
-                      </span>
+                      <span className="text-xl font-extrabold text-green-400">FREE (₹0)</span>
+                      <span className="text-[10px] text-slate-400 block">Internal College Paper Presentation</span>
                     </div>
                   ) : (
-                    <span className="text-base font-extrabold text-slate-400">₹150/person</span>
+                    <div>
+                      <span className="text-xl font-extrabold text-[#b91c1c]">₹200</span>
+                      <span className="text-[10px] text-slate-400 block">Fixed Event Fee</span>
+                    </div>
                   )}
                 </div>
               </div>
@@ -437,10 +410,6 @@ export const RegistrationWizardModal: React.FC<RegistrationWizardModalProps> = (
                         {eligibleTeam.members.length} / {eligibleTeam.memberCount} declared
                       </span>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-400">Declared Count:</span>
-                      <span className="text-white font-bold">{eligibleTeam.memberCount} members</span>
-                    </div>
 
                     {myTeams.length > 1 && (
                       <div className="pt-2 border-t border-white/10 space-y-1">
@@ -465,14 +434,6 @@ export const RegistrationWizardModal: React.FC<RegistrationWizardModalProps> = (
                       <div className="p-3 rounded-xl bg-[#1a0000] border border-amber-500/50 text-amber-300 text-[11px] space-y-1">
                         <strong className="block text-white">LEADER REGISTRATION ONLY</strong>
                         <p>Only the team captain can complete event registration and payment.</p>
-                      </div>
-                    )}
-
-                    {eligibleTeam.members.length < eligibleTeam.minTeamSize && (
-                      <div className="p-3 rounded-xl bg-[#1a0a00] border border-orange-500/40 text-orange-300 text-[11px]">
-                        <strong className="block">Team not ready.</strong>
-                        Minimum {eligibleTeam.minTeamSize} members required. Share join code:{' '}
-                        <span className="text-white font-bold">{eligibleTeam.teamCode}</span>
                       </div>
                     )}
                   </div>
@@ -503,18 +464,14 @@ export const RegistrationWizardModal: React.FC<RegistrationWizardModalProps> = (
                   <span className="text-slate-400">College:</span>
                   <span className="text-slate-300">{participantProfile?.college}</span>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-400">Registration Fee:</span>
-                  <span className="text-[#b91c1c] font-bold">₹150</span>
-                </div>
               </div>
             )}
 
-            {/* Info note */}
+            {/* 3-Event Limit Info */}
             <div className="p-3 rounded-xl bg-[#06080c] border border-slate-800 flex items-start gap-2">
               <Info className="w-3.5 h-3.5 text-slate-500 shrink-0 mt-0.5" />
               <span className="text-[10px] text-slate-400">
-                Clicking "Continue to Payment" will create your registration record in our system first, then take you to the payment page. The ₹0 fee applies to subsequent events after your first verified payment.
+                Registered Events Limit: <strong>{registeredEventCount} / 3</strong> max events allowed per participant.
               </span>
             </div>
 
@@ -527,81 +484,90 @@ export const RegistrationWizardModal: React.FC<RegistrationWizardModalProps> = (
                 size="md"
                 type="button"
                 onClick={handleStep1Continue}
-                disabled={isSubmitting || (isTeamEvent && (!eligibleTeam || !isLeader || eligibleTeam.members.length < eligibleTeam.minTeamSize))}
+                disabled={
+                  isSubmitting ||
+                  (isInternal && !isPaperPresentation) ||
+                  registeredEventCount >= 3 ||
+                  (isTeamEvent && (!eligibleTeam || !isLeader || eligibleTeam.members.length < eligibleTeam.minTeamSize))
+                }
                 className="font-bold font-mono"
               >
-                {isSubmitting ? 'Creating Registration…' : 'CONTINUE TO PAYMENT'}{' '}
+                {isSubmitting ? 'Creating Registration…' : isZeroFee ? 'CONFIRM FREE REGISTRATION' : 'CONTINUE TO PAYMENT'}{' '}
                 <ArrowRight className="w-4 h-4 ml-1.5" />
               </Button>
             </div>
           </div>
         )}
 
-        {/* ── STEP 2: PAYMENT ── */}
+        {/* ── STEP 2: BANK TRANSFER PAYMENT ── */}
         {step === 2 && createdReg && !isZeroFee && (
           <form onSubmit={handlePaymentSubmit} className="space-y-5">
-            {/* Fee Summary */}
-            <div className="p-4 rounded-2xl bg-[#0a0c10] border border-[#b91c1c]/50 flex flex-col sm:flex-row items-center justify-between gap-4">
+            {/* Amount Banner */}
+            <div className="p-4 rounded-2xl bg-[#0a0c10] border border-[#b91c1c]/50 flex items-center justify-between">
               <div>
-                <span className="text-[10px] text-slate-400 uppercase block">Amount to Pay</span>
-                <span className="text-2xl font-black text-white">₹{createdReg.calculatedFee}</span>
-                <span className="text-[10px] text-slate-400 block mt-0.5">
-                  Registration ID: <strong className="text-[#b91c1c]">{createdReg.registrationId}</strong>
-                </span>
-                {createdReg.teamMemberCount && (
-                  <span className="text-[10px] text-slate-500 block">
-                    ₹150 × {createdReg.teamMemberCount} members
-                  </span>
-                )}
+                <span className="text-[10px] text-slate-400 uppercase block">Registration Fee</span>
+                <span className="text-2xl font-black text-white">₹200</span>
               </div>
-
-              {paymentConfig && (
-                <div className="flex items-center gap-2 bg-[#1a0000] px-3 py-2 rounded-xl border border-[#b91c1c]/40 text-xs">
-                  <div>
-                    <span className="text-[9px] text-slate-400 block uppercase">TARAS Official UPI:</span>
-                    <span className="font-bold text-white font-mono">{paymentConfig.upiId}</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleCopyUpi}
-                    className="p-1.5 rounded-lg bg-[#0a0c10] text-[#b91c1c] hover:text-white"
-                    title="Copy UPI ID"
-                  >
-                    {copiedUpi ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* UPI QR */}
-            <div className="p-6 rounded-2xl bg-[#06080c] border border-white/10 flex flex-col sm:flex-row items-center justify-center gap-6">
-              <div className="p-3 bg-white rounded-2xl shadow-xl shadow-red-950/20 shrink-0">
-                <QRCodeSVG value={upiUri} size={150} level="M" />
-              </div>
-
-              <div className="space-y-2 text-xs font-mono text-slate-300">
-                <span className="text-amber-400 font-bold block flex items-center gap-1.5">
-                  <QrCode className="w-4 h-4" /> OFFICIAL TARAS UPI QR
-                </span>
-                <p className="text-[11px] text-slate-400 font-light leading-relaxed">
-                  Scan using Google Pay, PhonePe, Paytm, BHIM, or any UPI banking app.
-                </p>
-                <div className="p-2 rounded-xl bg-[#1a0000] border border-[#b91c1c]/40 text-[10px] text-white">
-                  <strong>Payee:</strong> {paymentConfig?.payeeName || 'TARAS 2K26 Official'}
-                </div>
+              <div className="text-right">
+                <span className="text-[10px] text-slate-400 block">Registration ID</span>
+                <strong className="text-[#b91c1c] text-sm">{createdReg.registrationId}</strong>
               </div>
             </div>
 
-            {/* Payment Proof Fields */}
+            {/* Official Bank Account Details Card */}
+            <div className="p-4.5 rounded-2xl bg-[#06080c] border border-amber-500/40 space-y-3">
+              <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                <span className="text-amber-400 font-bold text-xs uppercase flex items-center gap-1.5">
+                  <Building2 className="w-4 h-4" /> OFFICIAL BANK TRANSFER DETAILS
+                </span>
+                <button
+                  type="button"
+                  onClick={handleCopyBankDetails}
+                  className="px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 flex items-center gap-1 text-[10px] transition-colors"
+                >
+                  {copiedBankInfo ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
+                  {copiedBankInfo ? 'COPIED!' : 'COPY DETAILS'}
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-[11px]">
+                <div>
+                  <span className="text-slate-400 block text-[10px]">ACCOUNT NAME</span>
+                  <strong className="text-white">VALLIAMMAI ENGINEERING COLLEGE</strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px]">BANK NAME</span>
+                  <strong className="text-white">City Union Bank Ltd</strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px]">ACCOUNT NUMBER</span>
+                  <strong className="text-amber-400 font-mono text-sm">117109000031450</strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px]">IFSC CODE</span>
+                  <strong className="text-amber-400 font-mono text-sm">CIUB0000117</strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px]">BRANCH</span>
+                  <span className="text-slate-200">TAMBARAM BRANCH (EXTN COUNTER)</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px]">MICR CODE</span>
+                  <span className="text-slate-200 font-mono">600054011</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Proof Inputs */}
             <div className="space-y-4 pt-2 border-t border-white/10">
               <div>
                 <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-widest mb-1">
-                  UTR / Transaction Reference ID <span className="text-red-500">*</span>
+                  12-DIGIT TRANSACTION ID / UTR NUMBER <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. 628391746281 — 12-digit UPI Ref No."
+                  placeholder="Enter 12-digit Bank / UTR Reference Number"
                   value={utrInput}
                   onChange={(e) => setUtrInput(e.target.value)}
                   disabled={isSubmitting || uploaderState === 'uploading'}
@@ -611,7 +577,7 @@ export const RegistrationWizardModal: React.FC<RegistrationWizardModalProps> = (
 
               <div>
                 <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-widest mb-1.5">
-                  Payment Screenshot Proof <span className="text-red-500">*</span>
+                  PAYMENT RECEIPT SCREENSHOT (UNDER 1 MB) <span className="text-red-500">*</span>
                 </label>
                 <PaymentProofUploader
                   ref={uploaderRef}
@@ -673,7 +639,7 @@ export const RegistrationWizardModal: React.FC<RegistrationWizardModalProps> = (
               </h3>
               <p className={`text-xs font-bold ${isZeroFee ? 'text-green-400' : 'text-amber-400'}`}>
                 {isZeroFee
-                  ? 'Status: CONFIRMED — No payment required'
+                  ? 'Status: CONFIRMED — Free Internal Registration'
                   : 'Status: PENDING REGISTRATION TEAM REVIEW'}
               </p>
             </div>
@@ -690,38 +656,16 @@ export const RegistrationWizardModal: React.FC<RegistrationWizardModalProps> = (
               <div className="flex justify-between">
                 <span className="text-slate-400">Amount:</span>
                 <span className={`font-bold ${isZeroFee ? 'text-green-400' : 'text-white'}`}>
-                  {isZeroFee ? '₹0 (Already Paid)' : `₹${createdReg?.calculatedFee}`}
+                  {isZeroFee ? '₹0 (Free Internal Student)' : '₹200'}
                 </span>
               </div>
               {!isZeroFee && utrInput && (
                 <div className="flex justify-between">
                   <span className="text-slate-400">UTR / Ref:</span>
-                  <span className="text-slate-200">{utrInput}</span>
+                  <span className="text-slate-200 font-mono">{utrInput}</span>
                 </div>
               )}
-              <div className="flex justify-between">
-                <span className="text-slate-400">Digital Pass:</span>
-                <span className={`font-bold flex items-center gap-1 ${isZeroFee ? 'text-green-400' : 'text-amber-400'}`}>
-                  {isZeroFee ? (
-                    <><ShieldCheck className="w-3 h-3" /> ACTIVE</>
-                  ) : (
-                    <><Lock className="w-3 h-3" /> LOCKED UNTIL VERIFIED</>
-                  )}
-                </span>
-              </div>
             </div>
-
-            {!isZeroFee && (
-              <p className="text-[11px] text-slate-400 font-light">
-                Your payment proof is under manual review by the TARAS Registration Team. Once verified, your Digital Pass and Event QR will be activated automatically.
-              </p>
-            )}
-
-            {isZeroFee && (
-              <div className="p-3 rounded-xl bg-emerald-900/20 border border-green-500/30 text-[11px] text-green-300 font-mono">
-                Your team's previous payment has been verified. This event registration is <strong>free of charge</strong>. Your Digital Pass is now active for this event.
-              </div>
-            )}
 
             <Button
               variant="glow"
