@@ -31,14 +31,15 @@ import {
 } from '../../utils/imageCompression';
 import {
   uploadPaymentProofToSupabase,
-  type SupabasePaymentProofMetadata,
+  generateAuthoritativeTimestamp,
+  type DualStoragePaymentProofMetadata,
 } from '../../services/paymentProofStorageService';
 
 export type UploadState = 'idle' | 'compressing' | 'ready' | 'uploading' | 'success' | 'error';
 
 export interface PaymentProofUploaderRef {
-  /** Upload the currently optimized image to Supabase Storage */
-  upload: () => Promise<SupabasePaymentProofMetadata>;
+  /** Upload the currently optimized image to Supabase Storage & Google Drive Archive */
+  upload: () => Promise<DualStoragePaymentProofMetadata>;
   /** Check if a valid screenshot has been optimized and is ready for upload */
   isReady: boolean;
   /** Check if an upload is currently in flight */
@@ -66,7 +67,7 @@ export const PaymentProofUploader = forwardRef<PaymentProofUploaderRef, PaymentP
     const [isDragOver, setIsDragOver] = useState(false);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const currentUploadPromiseRef = useRef<Promise<SupabasePaymentProofMetadata> | null>(null);
+    const currentUploadPromiseRef = useRef<Promise<DualStoragePaymentProofMetadata> | null>(null);
     const latestOptimizedRef = useRef<OptimizedImageResult | null>(null);
 
     latestOptimizedRef.current = optimizedResult;
@@ -162,17 +163,23 @@ export const PaymentProofUploader = forwardRef<PaymentProofUploaderRef, PaymentP
     };
 
     // Actual upload logic invoked when user clicks Submit or Retry
-    const executeUpload = async (): Promise<SupabasePaymentProofMetadata> => {
+    const executeUpload = async (): Promise<DualStoragePaymentProofMetadata> => {
       // If already uploaded and no new image picked, return existing
       if (state === 'success' && existingScreenshotUrl && !optimizedResult) {
+        const timeInfo = generateAuthoritativeTimestamp();
         return {
+          paymentProofId: `EXISTING-${registrationId}`,
           provider: 'supabase',
           bucket: 'payment-proofs',
           path: '',
           fileSize: 0,
           contentType: 'image/webp',
-          uploadedAt: new Date().toISOString(),
+          uploadedAt: timeInfo.isoIST,
+          uploadedAtIST: timeInfo.formattedIST,
           signedUrl: existingScreenshotUrl,
+          supabasePath: '',
+          supabaseUploadStatus: 'SUCCESS',
+          googleDriveUploadStatus: 'SUCCESS',
         };
       }
 

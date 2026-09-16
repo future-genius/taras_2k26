@@ -177,7 +177,6 @@ export const AdminAnalyticsPage: React.FC = () => {
   const CATEGORY_COLORS: Record<string, string> = {
     TECHNICAL: '#b91c1c',
     'NON-TECHNICAL': '#0891b2',
-    WORKSHOP: '#d97706',
     UNKNOWN: '#475569',
   };
 

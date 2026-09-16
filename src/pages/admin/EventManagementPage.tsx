@@ -290,7 +290,6 @@ export const EventManagementPage: React.FC = () => {
                 >
                   <option value="TECHNICAL">TECHNICAL</option>
                   <option value="NON-TECHNICAL">NON-TECHNICAL</option>
-                  <option value="WORKSHOP">WORKSHOP</option>
                   <option value="HACKATHON">HACKATHON</option>
                 </select>
               </div>

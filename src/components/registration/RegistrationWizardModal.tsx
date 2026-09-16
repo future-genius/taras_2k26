@@ -26,7 +26,7 @@ import {
   type UploadState,
 } from './PaymentProofUploader';
 import { createEventRegistration, getParticipantRegistrations } from '../../services/eventRegistrationService';
-import { isInternalStudent } from '../../utils/college';
+import { isInternalStudent, normalizeRegNo, isInternalRegNo, getParticipantType } from '../../utils/college';
 import type { TARASEvent } from '../../types/event';
 import type { EventTeam } from '../../types/team';
 import type { RegistrationPaymentConfig } from '../../types/registrationConfig';
@@ -69,11 +69,13 @@ export const RegistrationWizardModal: React.FC<RegistrationWizardModalProps> = (
   const navigate = useNavigate();
 
   const currentUid = user?.uid || participantProfile?.uid || '';
-  const isInternal = isInternalStudent(participantProfile?.college);
-  const isPaperPresentation = event.id === 'taras-01';
+  const userRegNo = participantProfile?.registrationNumber?.trim() || '';
+  const isInternal = isInternalRegNo(userRegNo) || (userRegNo === '' && isInternalStudent(participantProfile?.college));
+  const isInternalPaperEvent = event.id === 'taras-01-int' || event.slug === 'paper-x-verse-internal';
+  const isExternalPaperEvent = event.id === 'taras-01-ext' || event.slug === 'paper-x-verse-external';
 
   // Step state
-  const [step, setStep] = useState<1 | 2 | 3>(existingRegistration ? 2 : 1);
+  const [step, setStep] = useState<1 | 2 | 3>(existingRegistration ? (existingRegistration.calculatedFee === 0 ? 3 : 2) : 1);
   const [paymentConfig, setPaymentConfig] = useState<RegistrationPaymentConfig | null>(null);
   const [copiedBankInfo, setCopiedBankInfo] = useState(false);
 
@@ -122,8 +124,8 @@ export const RegistrationWizardModal: React.FC<RegistrationWizardModalProps> = (
       (eligibleTeam.members?.some((m) => m.isLeader && (m.uid === currentUid || m.uid === participantProfile?.uid)))
     : false;
 
-  // Fee calculation
-  const calculatedFee = (isInternal && isPaperPresentation) ? 0 : 200;
+  // Fee calculation: Internal Paper Presentation = ₹0 (FREE); External / paid = ₹200
+  const calculatedFee = (isInternal && isInternalPaperEvent) ? 0 : 200;
   const isZeroFee = (createdReg?.calculatedFee ?? calculatedFee) === 0;
 
   useEffect(() => {
@@ -138,7 +140,7 @@ export const RegistrationWizardModal: React.FC<RegistrationWizardModalProps> = (
     }
 
     if (existingRegistration) {
-      setStep(2);
+      setStep(existingRegistration.calculatedFee === 0 ? 3 : 2);
       setCreatedReg(existingRegistration);
       setUtrInput(existingRegistration.utrNumber || '');
       return;
@@ -155,8 +157,13 @@ export const RegistrationWizardModal: React.FC<RegistrationWizardModalProps> = (
       return;
     }
 
-    if (isInternal && !isPaperPresentation) {
-      setErrorMsg('Internal college students are allowed to register ONLY for the Paper Presentation event.');
+    if (isInternal && !isInternalPaperEvent) {
+      setErrorMsg('SRM VEC Internal Participants (Reg No starting with 14222) are allowed to register ONLY for PAPER-X-VERSE — INTERNAL.');
+      return;
+    }
+
+    if (!isInternal && isInternalPaperEvent) {
+      setErrorMsg('External participants cannot register for PAPER-X-VERSE — INTERNAL. Please register for PAPER-X-VERSE — EXTERNAL or another external event.');
       return;
     }
 
@@ -181,9 +188,17 @@ export const RegistrationWizardModal: React.FC<RegistrationWizardModalProps> = (
         return;
       }
 
-      if (eligibleTeam.members.length < eligibleTeam.minTeamSize) {
+      const minRequired = event.minTeamSize || eligibleTeam.minTeamSize || 1;
+      const maxAllowed = event.maxTeamSize || eligibleTeam.maxTeamSize || 10;
+      if (eligibleTeam.members.length < minRequired) {
         setErrorMsg(
-          `Team size requirement not met. Minimum ${eligibleTeam.minTeamSize} members required, but only ${eligibleTeam.members.length} have joined.`
+          `Team size requirement not met for ${event.name}. Minimum ${minRequired} members required, but only ${eligibleTeam.members.length} have joined.`
+        );
+        return;
+      }
+      if (eligibleTeam.members.length > maxAllowed) {
+        setErrorMsg(
+          `Team size exceeds limit for ${event.name}. Maximum ${maxAllowed} members allowed, but your team has ${eligibleTeam.members.length} members.`
         );
         return;
       }
@@ -318,12 +333,22 @@ export const RegistrationWizardModal: React.FC<RegistrationWizardModalProps> = (
         </div>
 
         {/* Internal Student Restricted Banner */}
-        {isInternal && !isPaperPresentation && (
+        {isInternal && !isInternalPaperEvent && (
           <div className="p-3.5 rounded-2xl bg-amber-950/40 border border-amber-500/60 text-amber-200 flex items-start gap-2.5">
             <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
             <div>
-              <strong className="block text-white">INTERNAL STUDENT ELIGIBILITY NOTICE</strong>
-              Internal college students (VEC / SRM VEC) are allowed to register <strong>ONLY for the Paper Presentation event</strong> (Paper-X-Verse). Registration for this non-paper event is restricted.
+              <strong className="block text-white">SRM VEC INTERNAL PARTICIPANT ELIGIBILITY NOTICE</strong>
+              Internal college participants (Reg No starting with 14222) are allowed to register <strong>ONLY for Paper-X-Verse Internal</strong>. Registration for this event is restricted to external participants.
+            </div>
+          </div>
+        )}
+
+        {!isInternal && isInternalPaperEvent && (
+          <div className="p-3.5 rounded-2xl bg-amber-950/40 border border-amber-500/60 text-amber-200 flex items-start gap-2.5">
+            <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+            <div>
+              <strong className="block text-white">EXTERNAL PARTICIPANT NOTICE</strong>
+              Paper-X-Verse Internal is reserved exclusively for SRM VEC internal participants. External delegates should register for <strong>Paper-X-Verse External</strong>.
             </div>
           </div>
         )}
@@ -365,10 +390,10 @@ export const RegistrationWizardModal: React.FC<RegistrationWizardModalProps> = (
               <div className="flex items-center justify-between pt-2 border-t border-white/10">
                 <span className="text-slate-400">Registration Fee:</span>
                 <div className="text-right">
-                  {isInternal && isPaperPresentation ? (
+                  {isInternal && isInternalPaperEvent ? (
                     <div>
                       <span className="text-xl font-extrabold text-green-400">FREE (₹0)</span>
-                      <span className="text-[10px] text-slate-400 block">Internal College Paper Presentation</span>
+                      <span className="text-[10px] text-slate-400 block">SRM VEC Internal Participant</span>
                     </div>
                   ) : (
                     <div>
@@ -486,7 +511,8 @@ export const RegistrationWizardModal: React.FC<RegistrationWizardModalProps> = (
                 onClick={handleStep1Continue}
                 disabled={
                   isSubmitting ||
-                  (isInternal && !isPaperPresentation) ||
+                  (isInternal && !isInternalPaperEvent) ||
+                  (!isInternal && isInternalPaperEvent) ||
                   registeredEventCount >= 3 ||
                   (isTeamEvent && (!eligibleTeam || !isLeader || eligibleTeam.members.length < eligibleTeam.minTeamSize))
                 }
@@ -663,6 +689,23 @@ export const RegistrationWizardModal: React.FC<RegistrationWizardModalProps> = (
                 <div className="flex justify-between">
                   <span className="text-slate-400">UTR / Ref:</span>
                   <span className="text-slate-200 font-mono">{utrInput}</span>
+                </div>
+              )}
+              {event.eventHead && (
+                <div className="pt-2 border-t border-white/10 text-left font-mono flex items-center gap-3">
+                  {event.eventHead.image && (
+                    <img
+                      src={event.eventHead.image}
+                      alt={event.eventHead.name}
+                      className="w-10 h-10 rounded-xl object-cover border border-[#b91c1c] shrink-0"
+                    />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <span className="text-slate-400 block text-[10px] uppercase">Assigned Event Head:</span>
+                    <span className="font-bold text-white block text-sm">{event.eventHead.name}</span>
+                    <span className="text-[#b91c1c] block text-xs">Phone: +91 {event.eventHead.phone}</span>
+                    <span className="text-slate-300 block text-[11px] truncate">Email: {event.eventHead.email}</span>
+                  </div>
                 </div>
               )}
             </div>

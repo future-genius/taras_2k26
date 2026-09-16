@@ -5,7 +5,7 @@ import { EVENT_CATEGORY_VISUALS } from '../../config/visualAssets';
 interface VisualCardProps {
   title: string;
   subtitle?: string;
-  category?: 'technical' | 'non-technical' | 'workshop' | 'hackathon' | 'general';
+  category?: 'technical' | 'non-technical' | 'hackathon' | 'general';
   imageUrl?: string;
   badge?: string;
   children?: React.ReactNode;

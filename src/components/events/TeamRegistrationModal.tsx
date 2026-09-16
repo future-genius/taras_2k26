@@ -33,7 +33,7 @@ export const TeamRegistrationModal: React.FC<TeamRegistrationModalProps> = ({
     try {
       const team = await createTeam(
         teamName,
-        event.minTeamSize || 2,
+        event.minTeamSize || 1,
         event.minTeamSize,
         event.maxTeamSize
       );
@@ -78,9 +78,9 @@ export const TeamRegistrationModal: React.FC<TeamRegistrationModalProps> = ({
       <div className="space-y-5">
         {/* Header Requirement Banner */}
         <div className="p-3.5 rounded-xl bg-[#1a0000]/80 border border-[#b91c1c]/40 flex items-center justify-between text-xs font-mono">
-          <span className="text-slate-300">Team Size Constraint:</span>
+          <span className="text-slate-300">Allowed Team Size:</span>
           <span className="text-[#b91c1c] font-bold">
-            {event.minTeamSize} to {event.maxTeamSize} Members
+            {event.minTeamSize === event.maxTeamSize ? `${event.minTeamSize} Members` : `${event.minTeamSize} to ${event.maxTeamSize} Members`}
           </span>
         </div>
 

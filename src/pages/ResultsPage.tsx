@@ -84,7 +84,7 @@ export const ResultsPage: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-            {['ALL', 'TECHNICAL', 'NON-TECHNICAL', 'WORKSHOP'].map((cat) => (
+            {['ALL', 'TECHNICAL', 'NON-TECHNICAL'].map((cat) => (
               <button
                 key={cat}
                 onClick={() => setActiveCategory(cat)}

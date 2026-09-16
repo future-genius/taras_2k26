@@ -30,6 +30,7 @@ import {
   isStaffOrAbove,
   getCanonicalRole,
 } from '../utils/roleHelpers';
+import { normalizeRegNo, getParticipantType } from '../utils/college';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface RegisterData {
@@ -189,6 +190,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setError(null);
     setLoading(true);
     try {
+      const normalizedRegNo = normalizeRegNo(profileData.registrationNumber);
+      if (!normalizedRegNo) {
+        throw new Error('Registration number is mandatory.');
+      }
+      const participantType = getParticipantType(normalizedRegNo);
+
       const user = await signUpWithEmail(email, pass);
       saveSessionUser(user);
       setAuthUser(user);
@@ -207,7 +214,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         department: profileData.department,
         year: profileData.year,
         section: profileData.section || 'A',
-        registrationNumber: profileData.registrationNumber || '',
+        registrationNumber: normalizedRegNo,
+        participantType,
         role: 'participant',
         assignedEventIds: [],
         qrToken,
@@ -324,7 +332,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (data.department !== undefined) safeData.department = data.department;
     if (data.year !== undefined) safeData.year = data.year;
     if (data.section !== undefined) safeData.section = data.section;
-    if (data.registrationNumber !== undefined) safeData.registrationNumber = data.registrationNumber;
+    if (data.registrationNumber !== undefined) {
+      const normalized = normalizeRegNo(data.registrationNumber);
+      if (!normalized) {
+        throw new Error('Registration number is mandatory.');
+      }
+      safeData.registrationNumber = normalized;
+      safeData.participantType = getParticipantType(normalized);
+    }
     if (data.profilePhoto !== undefined) safeData.profilePhoto = data.profilePhoto;
 
     await db.updateDoc('participants', participantProfile.uid, safeData);

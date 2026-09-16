@@ -18,26 +18,36 @@ export const ProfilePage: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
 
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
   if (!participantProfile) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSaving(true);
+    setErrorMsg(null);
     setSavedSuccess(false);
+
+    const trimmedRegNo = registrationNumber.trim();
+    if (!trimmedRegNo) {
+      setErrorMsg('Registration Number is mandatory.');
+      return;
+    }
+
+    setIsSaving(true);
     try {
       await updateParticipantProfile({
-        fullName,
-        phone,
-        college,
-        department,
+        fullName: fullName.trim(),
+        phone: phone.trim(),
+        college: college.trim(),
+        department: department.trim(),
         year,
-        section,
-        registrationNumber,
+        section: section.trim(),
+        registrationNumber: trimmedRegNo,
       });
       setSavedSuccess(true);
       setTimeout(() => setSavedSuccess(false), 3000);
-    } catch (e) {
-      // Handled in context
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to update profile.');
     } finally {
       setIsSaving(false);
     }
@@ -208,10 +218,11 @@ export const ProfilePage: React.FC = () => {
 
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 font-mono">
-                  Registration No
+                  Registration No <span className="text-[#b91c1c]">*</span>
                 </label>
                 <input
                   type="text"
+                  required
                   value={registrationNumber}
                   onChange={(e) => setRegistrationNumber(e.target.value)}
                   className="w-full px-3 py-2.5 bg-[#0a0c10]/90 border border-[#b91c1c]/40 rounded-xl text-xs text-white focus:outline-none"

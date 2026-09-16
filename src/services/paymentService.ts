@@ -389,3 +389,129 @@ export async function getRegistrationsForVerification(filterStatus?: 'ALL' | 'PE
   const snap = await getDocs(q);
   return snap.docs.map((d) => d.data() as EventRegistration);
 }
+
+/**
+ * President Override: Revoke accidental rejection and restore payment status to PENDING
+ * (President/Super Admin Exclusive Authority)
+ */
+export async function presidentOverrideRestorePending(
+  registrationId: string,
+  presidentUid: string,
+  reason?: string
+): Promise<void> {
+  const regRef = doc(firestore, 'registrations', registrationId);
+  const now = new Date().toISOString();
+
+  let previousStatus = 'REJECTED';
+  let previousRejectionReason = '';
+
+  await runTransaction(firestore, async (transaction) => {
+    const regSnap = await transaction.get(regRef);
+    if (!regSnap.exists()) throw new Error('Registration record not found.');
+
+    const regData = regSnap.data();
+    previousStatus = regData.paymentStatus || regData.status;
+    previousRejectionReason = regData.rejectionReason || '';
+
+    // President Override writes: Restore to PENDING while preserving historical rejection audit trail
+    transaction.update(regRef, {
+      paymentStatus: 'PENDING',
+      status: 'PAYMENT_VERIFICATION_PENDING',
+      presidentOverrideAt: now,
+      presidentOverrideBy: presidentUid,
+      presidentOverrideAction: 'RESTORE_PENDING',
+      presidentOverrideReason: reason || 'Accidental rejection revoked by President',
+      updatedAt: serverTimestamp(),
+    });
+  });
+
+  // Write immutable audit log
+  try {
+    const auditRef = doc(collection(firestore, 'audit_logs'));
+    await setDoc(auditRef, {
+      action: 'PRESIDENT_OVERRIDE_RESTORED_PENDING',
+      registrationId,
+      actorUid: presidentUid,
+      actorRole: 'super_admin',
+      previousStatus,
+      previousRejectionReason,
+      newStatus: 'PENDING',
+      overrideReason: reason || 'Accidental rejection revoked by President',
+      timestamp: serverTimestamp(),
+    });
+  } catch (err) {
+    console.warn('Audit log write error:', err);
+  }
+}
+
+/**
+ * President Override: Directly override status to VERIFIED
+ * (President/Super Admin Exclusive Authority)
+ */
+export async function presidentOverrideVerify(
+  registrationId: string,
+  presidentUid: string,
+  reason?: string
+): Promise<void> {
+  const regRef = doc(firestore, 'registrations', registrationId);
+  const now = new Date().toISOString();
+
+  let previousStatus = 'UNKNOWN';
+  let previousRejectionReason = '';
+
+  await runTransaction(firestore, async (transaction) => {
+    const regSnap = await transaction.get(regRef);
+    if (!regSnap.exists()) throw new Error('Registration record not found.');
+
+    const regData = regSnap.data() as EventRegistration;
+    previousStatus = regData.paymentStatus || regData.status;
+    previousRejectionReason = (regData as any).rejectionReason || '';
+
+    const partRef = doc(firestore, 'participants', regData.uid);
+    const partSnap = await transaction.get(partRef);
+
+    // Write 1: Update registration status with President Override metadata
+    transaction.update(regRef, {
+      paymentStatus: 'VERIFIED',
+      status: 'CONFIRMED',
+      paymentVerifiedAt: now,
+      paymentVerifiedBy: presidentUid,
+      presidentOverrideAt: now,
+      presidentOverrideBy: presidentUid,
+      presidentOverrideAction: 'OVERRIDE_VERIFIED',
+      presidentOverrideReason: reason || 'Verified via President Override',
+      updatedAt: serverTimestamp(),
+    });
+
+    // Write 2: Update participant registeredEvents if needed
+    if (partSnap.exists()) {
+      const pData = partSnap.data();
+      const currentEvents = (pData.registeredEvents as string[]) || [];
+      if (!currentEvents.includes(regData.eventId)) {
+        transaction.update(partRef, {
+          registeredEvents: [...currentEvents, regData.eventId],
+          updatedAt: serverTimestamp(),
+        });
+      }
+    }
+  });
+
+  // Write immutable audit log
+  try {
+    const auditRef = doc(collection(firestore, 'audit_logs'));
+    await setDoc(auditRef, {
+      action: 'PRESIDENT_OVERRIDE_VERIFIED',
+      registrationId,
+      actorUid: presidentUid,
+      actorRole: 'super_admin',
+      previousStatus,
+      previousRejectionReason,
+      newStatus: 'VERIFIED',
+      overrideReason: reason || 'Verified via President Override',
+      timestamp: serverTimestamp(),
+    });
+  } catch (err) {
+    console.warn('Audit log write error:', err);
+  }
+}
+

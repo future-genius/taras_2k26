@@ -7,7 +7,7 @@ export interface CountdownEmailData {
   college: string;
   registeredEvents: string[];
   trigger: CountdownTrigger;
-  eventDate: string; // e.g. "26 September 2026"
+  eventDate: string; // e.g. "10 October 2026"
   venue: string;
 }
 

@@ -16,7 +16,7 @@ interface CommandItem {
 
 const COMMANDS: CommandItem[] = [
   { id: 'home', label: 'Home', description: 'Main landing page', path: '/', icon: <Home className="w-4 h-4" /> },
-  { id: 'events', label: 'Events', description: 'All competitions and workshops', path: '/events', icon: <Zap className="w-4 h-4" /> },
+  { id: 'events', label: 'Events', description: 'All competitions and technical events', path: '/events', icon: <Zap className="w-4 h-4" /> },
   { id: 'timeline', label: 'Timeline', description: 'Symposium schedule', path: '/timeline', icon: <Clock className="w-4 h-4" /> },
   { id: 'about', label: 'About', description: 'ECE Department & TARAS legacy', path: '/about', icon: <Info className="w-4 h-4" /> },
   { id: 'team', label: 'Team', description: 'Faculty & student organizers', path: '/team', icon: <Users className="w-4 h-4" /> },
@@ -118,14 +118,15 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose 
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: -12 }}
             transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
-            className="fixed top-[12vh] left-1/2 -translate-x-1/2 w-full max-w-lg z-[8001] shadow-2xl shadow-black"
+            style={{ width: 'min(94vw, 540px)' }}
+            className="fixed top-[8vh] sm:top-[12vh] left-1/2 -translate-x-1/2 z-[8001] shadow-2xl shadow-black font-mono"
             role="dialog"
             aria-label="Command Palette — Navigate TARAS 2K26"
           >
-            <div className="bg-[#0a0c10] border border-[#3f0000]/80 rounded-2xl overflow-hidden">
+            <div className="bg-[#0a0c10] border border-[#dc2626]/70 rounded-2xl overflow-hidden shadow-[0_0_40px_rgba(220,38,38,0.3)]">
               {/* Search input row */}
-              <div className="flex items-center gap-3 px-4 py-3.5 border-b border-[#1a0000]/80">
-                <Search className="w-4 h-4 text-[#7f1d1d] shrink-0" />
+              <div className="flex items-center gap-3 px-4 py-3.5 border-b border-[#dc2626]/30">
+                <Search className="w-4 h-4 text-[#dc2626] shrink-0" />
                 <input
                   ref={inputRef}
                   type="text"
@@ -133,23 +134,23 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose 
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   onKeyDown={handleKey}
-                  className="flex-1 bg-transparent text-sm text-white placeholder-slate-500 outline-none font-mono"
+                  className="flex-1 bg-transparent text-xs sm:text-sm text-white placeholder-slate-500 outline-none font-mono"
                   autoComplete="off"
                   spellCheck={false}
                 />
                 <button
                   onClick={onClose}
-                  className="p-1 rounded-lg hover:bg-[#1a0000] text-slate-500 hover:text-white transition-colors"
+                  className="p-1.5 rounded-lg hover:bg-[#1a0000] text-slate-400 hover:text-white transition-colors border border-transparent hover:border-[#dc2626]/40"
                   aria-label="Close palette"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="w-4 h-4 text-[#dc2626]" />
                 </button>
               </div>
 
               {/* Results list */}
-              <div ref={listRef} className="max-h-[50vh] overflow-y-auto py-2">
+              <div ref={listRef} className="max-h-[55vh] overflow-y-auto py-2">
                 {filtered.length === 0 ? (
-                  <div className="px-4 py-6 text-center text-sm text-slate-500 font-mono">
+                  <div className="px-4 py-6 text-center text-xs text-slate-500 font-mono">
                     No page found for "{query}"
                   </div>
                 ) : (
@@ -160,21 +161,21 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose 
                       onMouseEnter={() => setActiveIndex(i)}
                       className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
                         i === activeIndex
-                          ? 'bg-[#3f0000]/70 text-white'
-                          : 'text-slate-300 hover:bg-[#1a0000]/60 hover:text-white'
+                          ? 'bg-[#1a0000] text-white border-l-2 border-[#dc2626]'
+                          : 'text-slate-300 hover:bg-[#120404] hover:text-white'
                       }`}
                     >
                       <span
-                        className={`shrink-0 ${i === activeIndex ? 'text-[#b91c1c]' : 'text-[#7f1d1d]'}`}
+                        className={`shrink-0 ${i === activeIndex ? 'text-[#dc2626]' : 'text-slate-400'}`}
                       >
                         {cmd.icon}
                       </span>
-                      <span className="flex-1">
-                        <span className="block text-sm font-bold font-mono">{cmd.label}</span>
-                        <span className="block text-xs text-slate-500">{cmd.description}</span>
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-xs sm:text-sm font-bold font-mono text-white">{cmd.label}</span>
+                        <span className="block text-[11px] text-slate-400 leading-tight font-light">{cmd.description}</span>
                       </span>
                       {i === activeIndex && (
-                        <span className="shrink-0 text-[10px] font-mono text-[#7f1d1d] border border-[#3f0000] rounded px-1.5 py-0.5">
+                        <span className="shrink-0 text-[10px] font-mono text-[#dc2626] border border-[#dc2626]/40 rounded px-1.5 py-0.5">
                           ↵
                         </span>
                       )}

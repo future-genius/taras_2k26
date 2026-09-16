@@ -29,6 +29,7 @@ export const Header: React.FC<HeaderProps> = ({
   const navLinks = [
     { name: 'Home', path: '/' },
     { name: 'Events', path: '/events' },
+    { name: 'Guide', path: '/registration-guide' },
     { name: 'Timeline', path: '/timeline' },
     { name: 'About', path: '/about' },
     { name: 'Team', path: '/team' },
@@ -50,9 +51,9 @@ export const Header: React.FC<HeaderProps> = ({
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4">
           {/* TARAS Cyber Spider Shield Logo */}
-          <Link to="/" className="flex items-center gap-3 group shrink-0">
+          <Link to="/" className="flex items-center gap-2.5 sm:gap-3 group shrink min-w-0">
             <div className="relative p-[2px] rounded-2xl bg-gradient-to-tr from-[#dc2626] via-[#ff3333] to-[#7f1d1d] shadow-[0_0_20px_rgba(220,38,38,0.5)] group-hover:shadow-[0_0_35px_rgba(220,38,38,0.95)] group-hover:scale-105 transition-all duration-500 shrink-0">
-              <div className="flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 rounded-[14px] bg-[#07090d] border border-[#dc2626]/60 overflow-hidden relative">
+              <div className="flex items-center justify-center w-9 h-9 sm:w-11 sm:h-11 rounded-[14px] bg-[#07090d] border border-[#dc2626]/60 overflow-hidden relative">
                 <div className="absolute inset-0 bg-gradient-to-br from-[#b91c1c]/20 via-transparent to-black pointer-events-none" />
                 <img
                   src="/taras-logo.png"
@@ -63,13 +64,13 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
             </div>
 
-            <div className="flex flex-col">
+            <div className="flex flex-col min-w-0">
               <div className="flex items-center gap-1.5 leading-none">
-                <span className="font-bebas text-2xl tracking-wider text-white">
+                <span className="font-bebas text-xl sm:text-2xl tracking-wider text-white">
                   TARAS <span className="text-[#dc2626] drop-shadow-[0_0_12px_rgba(220,38,38,0.6)]">2K26</span>
                 </span>
               </div>
-              <span className="font-mono-tech text-[8px] sm:text-[8.5px] font-bold tracking-[0.22em] text-slate-400 uppercase mt-0.5">
+              <span className="font-mono-tech text-[7.5px] sm:text-[8.5px] font-bold tracking-[0.16em] sm:tracking-[0.22em] text-slate-400 uppercase mt-0.5 truncate max-w-[120px] sm:max-w-none">
                 TECHNOLOGY MEETS TOMORROW
               </span>
             </div>
@@ -163,18 +164,12 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          {/* ── Mobile Hamburger & Quick Controls ────────────────── */}
-          <div className="flex items-center gap-2 lg:hidden">
-            <button
-              onClick={onOpenPalette}
-              className="p-1.5 rounded-lg border border-slate-800 bg-[#0a0c10] text-slate-400 hover:text-white text-xs font-mono"
-            >
-              <Command className="w-3.5 h-3.5" />
-            </button>
+          {/* ── Mobile Navigation Controls ────────────────── */}
+          <div className="flex items-center gap-1.5 sm:gap-2 lg:hidden shrink-0 z-20">
             {!user && (
               <Link
                 to="/participant/register"
-                className="px-3 py-1.5 rounded-full text-xs font-mono font-bold text-white bg-[#dc2626] shadow-md shadow-red-900/40"
+                className="px-2.5 sm:px-3 py-1.5 rounded-full text-xs font-mono font-bold text-white bg-[#dc2626] shadow-md shadow-red-900/40 shrink-0"
               >
                 Register
               </Link>
@@ -182,10 +177,11 @@ export const Header: React.FC<HeaderProps> = ({
             {user && <HeaderUserMenu />}
             <button
               onClick={() => setMobileMenuOpen(true)}
-              className="p-2 rounded-xl text-slate-300 hover:text-white bg-[#0a0c10] border border-slate-800 hover:border-[#dc2626] transition-colors"
-              aria-label="Open Navigation Menu"
+              className="p-2 rounded-xl text-white bg-[#1a0000] border border-[#dc2626] shadow-[0_0_15px_rgba(220,38,38,0.4)] hover:bg-[#b91c1c] active:scale-95 transition-all flex items-center justify-center min-w-[42px] min-h-[42px] shrink-0 z-30"
+              aria-label="Open Mobile Navigation Menu"
+              title="Open Navigation Menu"
             >
-              <Menu className="w-5 h-5" />
+              <Menu className="w-5 h-5 text-white" />
             </button>
           </div>
         </div>

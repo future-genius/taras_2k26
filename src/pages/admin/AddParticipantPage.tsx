@@ -6,6 +6,7 @@ import { VisualAtmosphere } from '../../components/visual/VisualAtmosphere';
 import { Button } from '../../components/common/Button';
 import { ArrowLeft, UserPlus, CheckCircle2, AlertCircle } from 'lucide-react';
 import type { ParticipantProfile } from '../../types/participant';
+import { normalizeRegNo, getParticipantType } from '../../utils/college';
 
 export const AddParticipantPage: React.FC = () => {
   const navigate = useNavigate();
@@ -36,12 +37,16 @@ export const AddParticipantPage: React.FC = () => {
         throw new Error(`A participant with email "${email}" already exists.`);
       }
 
-      // Check duplicate registration number if provided
-      if (registrationNumber.trim()) {
-        const existingRegNo = await db.queryWhere('participants', 'registrationNumber', registrationNumber.trim());
-        if (existingRegNo.length > 0) {
-          throw new Error(`A participant with registration number "${registrationNumber}" already exists.`);
-        }
+      const normalizedRegNo = normalizeRegNo(registrationNumber);
+      if (!normalizedRegNo) {
+        throw new Error('Registration number is mandatory.');
+      }
+      const participantType = getParticipantType(normalizedRegNo);
+
+      // Check duplicate registration number
+      const existingRegNo = await db.queryWhere('participants', 'registrationNumber', normalizedRegNo);
+      if (existingRegNo.length > 0) {
+        throw new Error(`A participant with registration number "${normalizedRegNo}" already exists.`);
       }
 
       const randomDigits = Math.floor(10000000 + Math.random() * 90000000);
@@ -60,7 +65,8 @@ export const AddParticipantPage: React.FC = () => {
         department: department.trim(),
         year,
         section: section.trim().toUpperCase(),
-        registrationNumber: registrationNumber.trim(),
+        registrationNumber: normalizedRegNo,
+        participantType,
         role: 'participant', // Strict participant default
         assignedEventIds: [],
         qrToken,
@@ -187,10 +193,11 @@ export const AddParticipantPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Registration Number</label>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Registration Number <span className="text-[#b91c1c]">*</span></label>
                 <input
                   type="text"
-                  placeholder="312221106001"
+                  required
+                  placeholder="e.g. 1422200001 or 312221106001"
                   value={registrationNumber}
                   onChange={(e) => setRegistrationNumber(e.target.value)}
                   className="w-full px-4 py-2.5 bg-[#0a0c10] border border-slate-800 rounded-xl text-white focus:outline-none focus:border-[#b91c1c]"

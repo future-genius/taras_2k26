@@ -26,7 +26,7 @@ export const SpiderSenseProvider: React.FC<{ children: React.ReactNode }> = ({ c
       id: 'init-1',
       type: 'EVENT STARTING',
       title: 'TARAS 2K26 Countdown Active',
-      message: 'Symposium registrations opening for 26 September 2026.',
+      message: 'Symposium registrations opening for 10 October 2026.',
       timestamp: 'NOW',
     },
   ]);

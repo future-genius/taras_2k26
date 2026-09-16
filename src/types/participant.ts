@@ -28,6 +28,7 @@ export interface ParticipantProfile {
   year: 'I' | 'II' | 'III' | 'IV' | 'PG';
   section?: string;
   registrationNumber?: string;
+  participantType?: 'internal' | 'external';
   profilePhoto?: string;
   role: UserRole;
   assignedEventIds?: string[]; // Coordinator explicit event assignments

@@ -82,7 +82,7 @@ export const SponsorsPage: React.FC = () => {
             PARTNER WITH TARAS 2K26
           </h3>
           <p className="text-slate-300 text-sm max-w-xl mx-auto leading-relaxed font-light">
-            Sponsor our technical paper presentations, hackathons, and workshops for direct access to 1,200+ top engineering delegates.
+            Sponsor our technical paper presentations and hackathons for direct access to 1,200+ top engineering delegates.
           </p>
           <a href="mailto:taras2k26@gmail.com">
             <Button variant="glow" size="md" icon={<Mail className="w-4 h-4" />}>

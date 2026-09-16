@@ -135,7 +135,7 @@ export function buildDraftEventResult(
     totalScore: 0,
   };
 
-  const specialMentionItem = rankings[2];
+  const specialMentionItem = event.prizes && event.prizes.length >= 3 ? rankings[2] : undefined;
 
   const now = new Date().toISOString();
 

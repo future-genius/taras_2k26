@@ -5,7 +5,7 @@ import { generateRegistrationConfirmationEmail } from './templates/registrationC
 import { generateCountdownReminderEmail, CountdownTrigger } from './templates/countdownReminder.js';
 
 // Configuration Defaults
-const EVENT_DATE_IST = '2026-09-26'; // Official TARAS 2K26 Event Date
+const EVENT_DATE_IST = '2026-10-10'; // Official TARAS 2K26 Event Date
 const VENUE_NAME = 'SRM Valliammai Engineering College, Chennai';
 const DEFAULT_DAILY_LIMIT = 250;
 const DEFAULT_SENDER_EMAIL = 'taras2k26@valliammai.edu.in';
@@ -126,7 +126,7 @@ async function main() {
         college: task.college,
         department: task.department,
         registeredEvents: task.registeredEvents,
-        eventDate: '26 September 2026',
+        eventDate: '10 October 2026',
         venue: VENUE_NAME
       });
     } else {
@@ -137,7 +137,7 @@ async function main() {
         college: task.college,
         registeredEvents: task.registeredEvents,
         trigger: task.trigger || '7d',
-        eventDate: '26 September 2026',
+        eventDate: '10 October 2026',
         venue: VENUE_NAME
       });
     }
@@ -447,7 +447,7 @@ async function gatherRegistrationConfirmationTasks(
         'FREE'
       ].includes(paymentStatusNormalized);
 
-      // 3. Zero-fee registration (e.g. subsequent events after verified payment or free workshop)
+      // 3. Zero-fee registration (e.g. subsequent events after verified payment or free entry)
       const isZeroFee = (reg.calculatedFee === 0 || reg.feeAmount === 0);
 
       const isEligible = isConfirmedStatus || isVerifiedPayment || isZeroFee;
@@ -515,12 +515,12 @@ async function gatherCountdownReminderTasks(
 ): Promise<EmailTask[]> {
   const tasks: EmailTask[] = [];
 
-  // Define Trigger Dates relative to Event Date 2026-09-26
+  // Define Trigger Dates relative to Event Date 2026-10-10
   const triggers: { trigger: CountdownTrigger; dateStr: string }[] = [
-    { trigger: '7d', dateStr: '2026-09-19' },
-    { trigger: '3d', dateStr: '2026-09-23' },
-    { trigger: '1d', dateStr: '2026-09-25' },
-    { trigger: '0d', dateStr: '2026-09-26' }
+    { trigger: '7d', dateStr: '2026-10-03' },
+    { trigger: '3d', dateStr: '2026-10-07' },
+    { trigger: '1d', dateStr: '2026-10-09' },
+    { trigger: '0d', dateStr: '2026-10-10' }
   ];
 
   // Select the latest trigger whose date has arrived.

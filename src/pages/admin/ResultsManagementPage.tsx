@@ -40,7 +40,7 @@ export const ResultsManagementPage: React.FC = () => {
   const availableEvents = MOCK_EVENTS.filter((e) => {
     if (role === 'super_admin' || role === 'admin' || role === 'PRESIDENT') return true;
     if (assignedEventIds && assignedEventIds.length > 0) return assignedEventIds.includes(e.id);
-    return true;
+    return false;
   });
 
   const [selectedEventId, setSelectedEventId] = useState<string>(availableEvents[0]?.id || MOCK_EVENTS[0].id);

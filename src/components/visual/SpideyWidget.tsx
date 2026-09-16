@@ -36,7 +36,7 @@ export const SpideyWidget: React.FC = () => {
   };
 
   return (
-    <div className="fixed bottom-6 right-6 z-40 flex flex-col items-center pointer-events-auto">
+    <div className="fixed bottom-20 right-4 lg:bottom-6 lg:right-6 z-40 flex flex-col items-center pointer-events-auto">
       {/* ── Hanging Animated Web Line ── */}
       <motion.div
         animate={{

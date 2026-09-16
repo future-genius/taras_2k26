@@ -971,6 +971,7 @@ export const RegistrationDashboard: React.FC = () => {
           setSelectedReg(null);
         }}
         title="PAYMENT PROOF VERIFICATION DETAIL"
+        maxWidthClass="max-w-2xl sm:max-w-3xl"
       >
         {selectedReg && (
           <div className="space-y-5 font-mono text-xs">
@@ -998,6 +999,13 @@ export const RegistrationDashboard: React.FC = () => {
               </div>
 
               <div>
+                <span className="text-slate-400 text-[10px] uppercase block">Payment Proof ID:</span>
+                <span className="font-extrabold text-amber-300 text-sm font-mono">
+                  {selectedReg.paymentProofId || (selectedReg.paymentProof as any)?.paymentProofId || 'PAY-TARAS-LEGACY'}
+                </span>
+              </div>
+
+              <div>
                 <span className="text-slate-400 text-[10px] uppercase block">Participant UID / ID:</span>
                 <span className="text-slate-200">{selectedReg.participantId} ({selectedReg.uid})</span>
               </div>
@@ -1015,6 +1023,13 @@ export const RegistrationDashboard: React.FC = () => {
               )}
 
               <div>
+                <span className="text-slate-400 text-[10px] uppercase block">Authoritative Submission Timestamp:</span>
+                <span className="text-white font-bold">
+                  {(selectedReg as any).uploadedAtIST || (selectedReg as any).paymentSubmittedAt || 'N/A'}
+                </span>
+              </div>
+
+              <div>
                 <span className="text-slate-400 text-[10px] uppercase block">Expected Fee Amount:</span>
                 <span className="text-white font-extrabold text-sm">₹{selectedReg.feeAmount || 200}</span>
               </div>
@@ -1022,6 +1037,40 @@ export const RegistrationDashboard: React.FC = () => {
               <div>
                 <span className="text-slate-400 text-[10px] uppercase block">Submitted UTR / Ref:</span>
                 <span className="text-amber-400 font-extrabold text-sm">{selectedReg.utrNumber || 'N/A'}</span>
+              </div>
+
+              {/* Dual Storage Metadata */}
+              <div className="col-span-1 sm:col-span-2 pt-2 border-t border-white/10 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="p-2.5 rounded-xl bg-black/60 border border-slate-800">
+                  <span className="text-[9px] text-slate-400 uppercase font-bold block">Supabase Storage Reference</span>
+                  <span className="text-[11px] font-mono text-emerald-400 truncate block">
+                    {(selectedReg as any).supabasePath || selectedReg.paymentScreenshotPath || 'payment-proofs/default'}
+                  </span>
+                  <span className="text-[9px] text-slate-500">Status: <strong className="text-emerald-400">STORED</strong></span>
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-black/60 border border-slate-800">
+                  <span className="text-[9px] text-slate-400 uppercase font-bold block">Google Drive Archive</span>
+                  {(selectedReg as any).googleDriveFileId || (selectedReg.paymentProof as any)?.googleDriveFileId ? (
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-mono text-blue-400 truncate block">
+                        File ID: {(selectedReg as any).googleDriveFileId || (selectedReg.paymentProof as any)?.googleDriveFileId}
+                      </span>
+                      <a
+                        href={`https://drive.google.com/file/d/${(selectedReg as any).googleDriveFileId || (selectedReg.paymentProof as any)?.googleDriveFileId}/view`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[10px] font-bold text-amber-400 hover:text-white underline flex items-center gap-1 shrink-0"
+                      >
+                        <ExternalLink className="w-3 h-3" /> Open Drive
+                      </a>
+                    </div>
+                  ) : (
+                    <span className="text-[11px] font-mono text-slate-500 block">
+                      Status: {(selectedReg as any).googleDriveUploadStatus || 'PENDING'}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 

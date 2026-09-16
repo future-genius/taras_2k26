@@ -19,6 +19,7 @@
     ]
   },
   "hosting": {
+    "site": "taras-2k26",
     "public": "dist",
     "ignore": [
       "firebase.json",

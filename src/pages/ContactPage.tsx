@@ -31,21 +31,42 @@ export const ContactPage: React.FC = () => {
               </h3>
               <div className="space-y-4 text-xs sm:text-sm text-slate-300">
                 <div>
-                  <strong className="text-white block font-mono text-sm">Faculty Conveners</strong>
-                  <span>Dr. Komala (HOD/ECE), Dr. G. Uresh Kumar & Dr. C. Amali</span>
+                  <strong className="text-white block font-mono text-sm">HOD & Department Head</strong>
+                  <span>DR. KOMALA JAMES M.E., PH.D. (Professor & Head of ECE)</span>
                   <div className="flex items-center gap-2 text-[#b91c1c] mt-1 font-mono">
-                    <Mail className="w-3.5 h-3.5" /> taras2k26@gmail.com
+                    <Mail className="w-3.5 h-3.5" /> komalaj.ece@srmvalliammai.ac.in
+                  </div>
+                </div>
+                <div className="pt-3 border-t border-white/10">
+                  <strong className="text-white block font-mono text-sm">Staff Event Coordinators</strong>
+                  <span>DR. N. JOTHY, M.TECH., PH.D & DR. R. DHANANJEYAN, M.E., PH.D.</span>
+                  <div className="flex flex-col gap-1 text-[#b91c1c] mt-1 font-mono text-xs">
+                    <div className="flex items-center gap-2"><Mail className="w-3.5 h-3.5" /> jothyn.ece@srmvalliammai.ac.in</div>
+                    <div className="flex items-center gap-2"><Mail className="w-3.5 h-3.5" /> dhananjeyanr.ece@srmvalliammai.ac.in</div>
                   </div>
                 </div>
                 <div className="pt-3 border-t border-white/10">
                   <strong className="text-white block font-mono text-sm">Student Council President</strong>
-                  <span>R. Kirthivasan (Final Year ECE)</span>
+                  <span>HARIHARAN R (Final Year ECE)</span>
                   <div className="flex items-center gap-2 text-[#b91c1c] mt-1 font-mono">
-                    <Phone className="w-3.5 h-3.5" /> +91 88385 13747
+                    <Phone className="w-3.5 h-3.5" /> 8637423676
+                  </div>
+                  <div className="flex items-center gap-2 text-[#b91c1c] mt-1 font-mono">
+                    <Mail className="w-3.5 h-3.5" /> haranrhari28@gmail.com
                   </div>
                 </div>
                 <div className="pt-3 border-t border-white/10">
-                  <strong className="text-white block font-mono text-sm">Official Email</strong>
+                  <strong className="text-white block font-mono text-sm">Student Council Secretary</strong>
+                  <span>PRASANNARAJ S (Final Year ECE)</span>
+                  <div className="flex items-center gap-2 text-[#b91c1c] mt-1 font-mono">
+                    <Phone className="w-3.5 h-3.5" /> 9710125994
+                  </div>
+                  <div className="flex items-center gap-2 text-[#b91c1c] mt-1 font-mono">
+                    <Mail className="w-3.5 h-3.5" /> prasanna11112005@gmail.com
+                  </div>
+                </div>
+                <div className="pt-3 border-t border-white/10">
+                  <strong className="text-white block font-mono text-sm">Official Symposium Email</strong>
                   <div className="flex items-center gap-2 text-white mt-1 font-mono font-bold">
                     <Mail className="w-3.5 h-3.5 text-[#b91c1c]" /> taras2k26@gmail.com
                   </div>

@@ -10,6 +10,8 @@ import { Button } from '../common/Button';
 import { Badge } from '../common/Badge';
 import { Modal } from '../common/Modal';
 import type { EventTeam, TeamJoinRequest } from '../../types/team';
+import { MOCK_EVENTS, getEventById } from '../../data/events';
+import { isInternalRegNo, isInternalStudent } from '../../utils/college';
 import {
   Users,
   Plus,
@@ -52,12 +54,20 @@ export const TeamHub: React.FC = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isJoinModalOpen, setIsJoinModalOpen] = useState(false);
 
+  // Derived internal user status & available events for squad creation
+  const userRegNo = participantProfile?.registrationNumber?.trim() || '';
+  const isInternalUser = participantProfile ? (isInternalRegNo(userRegNo) || (userRegNo === '' && isInternalStudent(participantProfile.college))) : false;
+  const availableEventsForTeam = MOCK_EVENTS.filter((ev) => isInternalUser ? (ev.allowInternal || ev.id === 'taras-01-int') : ev.allowExternal);
+
   // Create form states
   const [newTeamName, setNewTeamName] = useState('');
-  const [memberCount, setMemberCount] = useState(2);
+  const [selectedEventId, setSelectedEventId] = useState<string>(availableEventsForTeam[0]?.id || MOCK_EVENTS[0].id);
+  const [memberCount, setMemberCount] = useState(availableEventsForTeam[0]?.minTeamSize || MOCK_EVENTS[0].minTeamSize);
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const selectedEventConfig = MOCK_EVENTS.find((e) => e.id === selectedEventId) || availableEventsForTeam[0] || MOCK_EVENTS[0];
 
   // Action feedback states
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
@@ -112,18 +122,19 @@ export const TeamHub: React.FC = () => {
   const handleCreateTeamSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTeamName.trim()) return;
-    if (!memberCount || memberCount < 1) {
-      setFormError('Member count must be at least 1.');
+    const minSize = selectedEventConfig.minTeamSize;
+    const maxSize = selectedEventConfig.maxTeamSize;
+    if (!memberCount || memberCount < minSize || memberCount > maxSize) {
+      setFormError(`Member count must be between ${minSize} and ${maxSize} for ${selectedEventConfig.name}.`);
       return;
     }
     setFormError(null);
     setIsSubmitting(true);
 
     try {
-      // Teams are event-independent: no event selection required
-      await createTeam(newTeamName.trim(), memberCount);
+      await createTeam(newTeamName.trim(), memberCount, minSize, maxSize);
       setNewTeamName('');
-      setMemberCount(2);
+      setMemberCount(MOCK_EVENTS[0].minTeamSize);
       setIsCreateModalOpen(false);
     } catch (err: any) {
       setFormError(err.message || 'Failed to create team.');
@@ -297,7 +308,7 @@ export const TeamHub: React.FC = () => {
             <strong className="text-slate-200">2.</strong> Once your squad is complete → go to <Link to="/events" className="text-[#b91c1c] hover:underline">Events Hub</Link> to register your team for events
           </span>
           <span className="block">
-            <strong className="text-slate-200">3.</strong> First registration: ₹150 × team member count. Subsequent events = ₹0
+            <strong className="text-slate-200">3.</strong> First registration: ₹200 × team member count. Subsequent events = ₹0
           </span>
         </div>
       </div>
@@ -364,7 +375,7 @@ export const TeamHub: React.FC = () => {
             const isLocked = !!team.eventRegistrationStarted;
             const memberCountAuth = team.memberCount || team.maxTeamSize;
             const joinedCount = team.members?.length || 1;
-            const feeTotal = memberCountAuth * 150;
+            const feeTotal = memberCountAuth * 200;
 
             return (
               <div
@@ -446,12 +457,30 @@ export const TeamHub: React.FC = () => {
                   </div>
                 </div>
 
+                {/* Event-Wise Team Forming Details */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-[11px] font-mono">
+                  <div className="p-2.5 rounded-xl bg-[#06080c] border border-slate-800">
+                    <span className="text-slate-400 block text-[9px] uppercase mb-0.5">Allowed Team Size</span>
+                    <span className="text-white font-bold text-sm">
+                      {team.minTeamSize === team.maxTeamSize ? `${team.minTeamSize} Members` : `${team.minTeamSize}–${team.maxTeamSize} Members`}
+                    </span>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-[#06080c] border border-slate-800">
+                    <span className="text-slate-400 block text-[9px] uppercase mb-0.5">Current Team</span>
+                    <span className="text-amber-400 font-bold text-sm">{joinedCount} / {memberCountAuth} Members</span>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-[#06080c] border border-slate-800">
+                    <span className="text-slate-400 block text-[9px] uppercase mb-0.5">Solo Participation</span>
+                    <span className="text-white font-bold text-sm">{team.minTeamSize === 1 ? 'Allowed' : 'Not Allowed'}</span>
+                  </div>
+                </div>
+
                 {/* Fee Info */}
                 <div className="grid grid-cols-2 gap-3 text-[11px] font-mono">
                   <div className="p-3 rounded-xl bg-[#06080c] border border-slate-800">
                     <span className="text-slate-400 block text-[10px] uppercase mb-0.5">Declared Size</span>
                     <span className="text-white font-bold text-lg">{memberCountAuth}</span>
-                    <span className="text-slate-500 text-[10px] block">members</span>
+                    <span className="text-slate-500 text-[10px] block">min {team.minTeamSize} – max {team.maxTeamSize}</span>
                   </div>
                   <div className="p-3 rounded-xl bg-[#06080c] border border-slate-800">
                     <span className="text-slate-400 block text-[10px] uppercase mb-0.5">Registration Fee</span>
@@ -459,7 +488,7 @@ export const TeamHub: React.FC = () => {
                       {isLocked ? '₹0' : `₹${feeTotal}`}
                     </span>
                     <span className="text-slate-500 text-[10px] block">
-                      {isLocked ? 'Already paid' : `₹150 × ${memberCountAuth}`}
+                      {isLocked ? 'Already paid' : `₹200 × ${memberCountAuth}`}
                     </span>
                   </div>
                 </div>
@@ -685,7 +714,7 @@ export const TeamHub: React.FC = () => {
           <div className="p-3 rounded-xl bg-[#06080c] border border-slate-700 text-[11px] text-slate-300 flex items-start gap-2">
             <Info className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
             <span>
-              <strong className="text-white">No event selection required.</strong> Create your squad first, share the join code with team members, then go to Events Hub to register together.
+              Select your target event below. Your squad member count will be configured strictly according to that event's team formation rules.
             </span>
           </div>
 
@@ -697,7 +726,42 @@ export const TeamHub: React.FC = () => {
           )}
 
           <div>
-            <label className="block text-slate-300 font-bold uppercase text-[10px] mb-1.5">Squad Name <span className="text-red-400">*</span></label>
+            <label className="block text-slate-300 font-bold uppercase text-[10px] mb-1.5">
+              Select Event <span className="text-red-400">*</span>
+            </label>
+            <select
+              value={selectedEventId}
+              onChange={(e) => {
+                const id = e.target.value;
+                setSelectedEventId(id);
+                const ev = MOCK_EVENTS.find((m) => m.id === id);
+                if (ev) setMemberCount(ev.minTeamSize);
+              }}
+              className="w-full px-3 py-2.5 bg-[#0a0c10] border border-slate-700 rounded-xl text-white focus:outline-none focus:border-[#b91c1c] transition-colors"
+            >
+              {availableEventsForTeam.map((ev) => (
+                <option key={ev.id} value={ev.id}>
+                  {ev.name} (Team Size: {ev.minTeamSize === ev.maxTeamSize ? `${ev.minTeamSize} Member` : `${ev.minTeamSize}–${ev.maxTeamSize} Members`})
+                </option>
+              ))}
+            </select>
+            <div className="mt-2 p-2.5 rounded-lg bg-[#0a0c10] border border-slate-800 text-[11px] space-y-1">
+              <div className="text-slate-300 flex justify-between">
+                <span>Event: <strong className="text-white">{selectedEventConfig.name}</strong></span>
+                <span className="text-[#b91c1c] font-bold">
+                  {selectedEventConfig.allowInternal ? 'Internal Eligible' : 'External Only'}
+                </span>
+              </div>
+              <div className="text-amber-400 font-bold">
+                Configured Team Size: {selectedEventConfig.minTeamSize === selectedEventConfig.maxTeamSize ? `${selectedEventConfig.minTeamSize} members` : `${selectedEventConfig.minTeamSize}–${selectedEventConfig.maxTeamSize} members`}
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-slate-300 font-bold uppercase text-[10px] mb-1.5">
+              Squad Name <span className="text-red-400">*</span>
+            </label>
             <input
               type="text"
               required
@@ -711,26 +775,26 @@ export const TeamHub: React.FC = () => {
 
           <div>
             <label className="block text-slate-300 font-bold uppercase text-[10px] mb-1.5">
-              Total Member Count <span className="text-red-400">*</span>
-              <span className="text-amber-400 ml-2 normal-case font-normal">(including yourself)</span>
+              Declared Member Count <span className="text-red-400">*</span>
+              <span className="text-amber-400 ml-2 normal-case font-normal">(Allowed: {selectedEventConfig.minTeamSize}–{selectedEventConfig.maxTeamSize} members)</span>
             </label>
             <div className="flex items-center gap-3">
               <input
                 type="number"
                 required
-                min={1}
-                max={10}
+                min={selectedEventConfig.minTeamSize}
+                max={selectedEventConfig.maxTeamSize}
                 value={memberCount}
-                onChange={(e) => setMemberCount(parseInt(e.target.value) || 1)}
+                onChange={(e) => setMemberCount(parseInt(e.target.value) || selectedEventConfig.minTeamSize)}
                 className="w-24 px-3 py-2.5 bg-[#0a0c10] border border-slate-700 rounded-xl text-white text-center font-bold text-lg focus:outline-none focus:border-[#b91c1c] transition-colors"
               />
               <div className="text-[11px] text-slate-400 space-y-0.5">
-                <div>Fee: <span className="text-amber-400 font-bold">₹{memberCount * 150}</span> total</div>
-                <div className="text-[10px]">(₹150 × {memberCount} members, paid at event registration)</div>
+                <div>Fee: <span className="text-amber-400 font-bold">₹{memberCount * 200}</span> total</div>
+                <div className="text-[10px]">(₹200 × {memberCount} members, paid at event registration)</div>
               </div>
             </div>
             <span className="text-[10px] text-slate-500 mt-1 block">
-              This locks in your team size for fee calculation. Cannot be changed after event registration.
+              Configured strictly for {selectedEventConfig.name} rules.
             </span>
           </div>
 

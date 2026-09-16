@@ -31,34 +31,38 @@ export const DEFAULT_SCORING_CRITERIA: ScoreCriterion[] = [
   },
 ];
 
+const paperCriteria: ScoreCriterion[] = [
+  {
+    id: 'p-content',
+    name: 'Content Quality & Technical Depth',
+    description: 'Technical accuracy, depth of engineering principles, and clarity of methodology.',
+    maxScore: 25,
+  },
+  {
+    id: 'p-innovation',
+    name: 'Innovation & Originality',
+    description: 'Novelty of idea, unique problem solving approach, and originality.',
+    maxScore: 25,
+  },
+  {
+    id: 'p-delivery',
+    name: 'Presentation & Delivery Clarity',
+    description: 'Slide design quality, verbal delivery confidence, and adherence to 8-minute limit.',
+    maxScore: 25,
+  },
+  {
+    id: 'p-mcu',
+    name: 'Relevance of MCU Ability Correlation',
+    description: 'Mandatory Marvel superpower explanation quality and how well it correlates with the project technology.',
+    maxScore: 25,
+  },
+];
+
 export const EVENT_SPECIFIC_CRITERIA: Record<string, ScoreCriterion[]> = {
   // Paper-X-Verse: MCU-Themed Technical Paper Presentation
-  'taras-01': [
-    {
-      id: 'p-content',
-      name: 'Content Quality & Technical Depth',
-      description: 'Technical accuracy, depth of engineering principles, and clarity of methodology.',
-      maxScore: 25,
-    },
-    {
-      id: 'p-innovation',
-      name: 'Innovation & Originality',
-      description: 'Novelty of idea, unique problem solving approach, and originality.',
-      maxScore: 25,
-    },
-    {
-      id: 'p-delivery',
-      name: 'Presentation & Delivery Clarity',
-      description: 'Slide design quality, verbal delivery confidence, and adherence to 8-minute limit.',
-      maxScore: 25,
-    },
-    {
-      id: 'p-mcu',
-      name: 'Relevance of MCU Ability Correlation',
-      description: 'Mandatory Marvel superpower explanation quality and how well it correlates with the project technology.',
-      maxScore: 25,
-    },
-  ],
+  'taras-01': paperCriteria,
+  'taras-01-int': paperCriteria,
+  'taras-01-ext': paperCriteria,
 
 
 

@@ -15,8 +15,9 @@ import {
 import type { Unsubscribe } from 'firebase/firestore';
 import { firestore } from '../config/firebase';
 import type { EventTeam, RegistrationTeamMember, TeamJoinRequest } from '../types/team';
+import { normalizeRegNo, isInternalRegNo, getParticipantType } from '../utils/college';
 
-const BASE_FEE_PER_PERSON = 150; // ₹150 per person
+const BASE_FEE_PER_PERSON = 200; // ₹200 per person
 
 export { BASE_FEE_PER_PERSON };
 
@@ -135,7 +136,12 @@ export async function createTeam(
   const trimmedName = teamName.trim();
   if (!trimmedName) throw new Error('Team name cannot be empty.');
   if (!memberCount || memberCount < 1) throw new Error('Member count must be at least 1.');
-  if (memberCount > 10) throw new Error('Member count cannot exceed 10.');
+  if (minTeamSize && memberCount < minTeamSize) {
+    throw new Error(`Team member count (${memberCount}) is below the minimum required (${minTeamSize}) for the selected event.`);
+  }
+  if (maxTeamSize && memberCount > maxTeamSize) {
+    throw new Error(`Team member count (${memberCount}) exceeds the maximum allowed (${maxTeamSize}) for the selected event.`);
+  }
 
   const isUnique = await verifyUniqueTeamName(trimmedName);
   if (!isUnique) {
@@ -180,7 +186,12 @@ export async function createTeam(
     if (!pSnap.exists()) throw new Error('Participant profile not found.');
 
     const pData = pSnap.data();
-    const teamIds = (pData.teamIds as string[]) || [];
+    const existingTeamId = pData.teamId;
+    const existingTeamIds = (pData.teamIds as string[]) || [];
+
+    if (existingTeamId || existingTeamIds.length > 0) {
+      throw new Error('You are already a member of a team. Each participant can belong to only one team.');
+    }
 
     // Write team document
     transaction.set(teamRef, {
@@ -203,9 +214,10 @@ export async function createTeam(
       updatedAt: serverTimestamp(),
     });
 
-    // Update leader profile teamIds
+    // Update leader profile teamId & teamIds
     transaction.update(partRef, {
-      teamIds: Array.from(new Set([...teamIds, teamId])),
+      teamId: teamId,
+      teamIds: [teamId],
       updatedAt: serverTimestamp(),
     });
   });
@@ -323,6 +335,16 @@ export async function requestToJoinTeam(
     );
   }
 
+  // Verify requesting participant has no existing team membership
+  const callerPartRef = doc(firestore, 'participants', participantUid);
+  const callerPartSnap = await getDoc(callerPartRef);
+  if (callerPartSnap.exists()) {
+    const pData = callerPartSnap.data();
+    if (pData.teamId || ((pData.teamIds as string[]) || []).length > 0) {
+      throw new Error('You cannot join this team because you are already part of another team.');
+    }
+  }
+
   const requestId = `REQ-${targetTeamId}-${participantId}`;
   const reqRef = doc(firestore, 'team_join_requests', requestId);
   const reqSnap = await getDoc(reqRef);
@@ -349,6 +371,15 @@ export async function requestToJoinTeam(
   };
 
   await runTransaction(firestore, async (transaction) => {
+    // Read caller profile inside transaction to ensure atomicity
+    const pSnap = await transaction.get(callerPartRef);
+    if (pSnap.exists()) {
+      const pData = pSnap.data();
+      if (pData.teamId || ((pData.teamIds as string[]) || []).length > 0) {
+        throw new Error('You cannot join this team because you are already part of another team.');
+      }
+    }
+
     transaction.set(reqRef, {
       ...joinReq,
       requestedAt: serverTimestamp(),
@@ -397,6 +428,15 @@ export async function approveJoinRequest(
       throw new Error(`This join request has already been ${reqData.status.toLowerCase()}.`);
     }
 
+    const partRef = doc(firestore, 'participants', reqData.participantUid);
+    const partSnap = await transaction.get(partRef);
+    if (!partSnap.exists()) throw new Error('Participant profile not found.');
+
+    const targetPartData = partSnap.data();
+    if (targetPartData.teamId || ((targetPartData.teamIds as string[]) || []).length > 0) {
+      throw new Error('This participant cannot join this team because they are already part of another team.');
+    }
+
     const teamRef = doc(firestore, 'teams', reqData.teamId);
     const teamSnap = await transaction.get(teamRef);
     if (!teamSnap.exists()) throw new Error('Team not found.');
@@ -427,8 +467,6 @@ export async function approveJoinRequest(
         `Cannot approve: Team "${teamData.teamName}" has reached its declared member count of ${teamData.memberCount}.`
       );
     }
-
-    const partRef = doc(firestore, 'participants', reqData.participantUid);
 
     // ── 2. PREPARE MUTATIONS (Strip email & qrToken from embedded member) ──
     const now = new Date().toISOString();
@@ -476,6 +514,7 @@ export async function approveJoinRequest(
     );
 
     transaction.update(partRef, {
+      teamId: teamData.teamId,
       teamIds: arrayUnion(teamData.teamId),
       updatedAt: serverTimestamp(),
     });
@@ -633,6 +672,7 @@ export async function removeMemberFromTeam(
     );
 
     transaction.update(partRef, {
+      teamId: null,
       teamIds: arrayRemove(teamId),
       updatedAt: serverTimestamp(),
     });
@@ -715,7 +755,9 @@ export async function leaveTeam(memberUid: string, teamId: string): Promise<void
     if (partSnap.exists()) {
       const pData = partSnap.data();
       const teamIds = ((pData.teamIds as string[]) || []).filter((id) => id !== teamId);
+      const newTeamId = teamIds.length > 0 ? teamIds[0] : null;
       transaction.update(partRef, {
+        teamId: newTeamId,
         teamIds,
         updatedAt: serverTimestamp(),
       });
@@ -792,6 +834,7 @@ export async function deleteTeam(
     // B. Update all member profiles (remove teamId reference)
     memberUids.forEach((mUid) => {
       transaction.update(doc(firestore, 'participants', mUid), {
+        teamId: null,
         teamIds: arrayRemove(teamId),
         updatedAt: serverTimestamp(),
       });

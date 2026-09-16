@@ -39,11 +39,11 @@ export const LiveModeToggleBtn: React.FC = () => {
           ? 'bg-[#1a0000] text-white border border-[#b91c1c] shadow-[0_0_15px_rgba(185,28,28,0.5)]'
           : 'bg-[#0a0c10] text-slate-400 border border-slate-800 hover:text-white hover:border-slate-700'
       }`}
-      title="Toggle TARAS Live Mode (26 Sept 2026 Active State)"
+      title="Toggle TARAS Live Mode (10 Oct 2026 Active State)"
     >
       <span className={`w-2 h-2 rounded-full ${isLiveMode ? 'bg-[#b91c1c] animate-ping' : 'bg-slate-600'}`} />
       <Radio className={`w-3.5 h-3.5 ${isLiveMode ? 'text-[#b91c1c]' : 'text-slate-500'}`} />
-      <span>{isLiveMode ? 'LIVE MODE ACTIVE' : 'LIVE MODE 26.09.2026'}</span>
+      <span>{isLiveMode ? 'LIVE MODE ACTIVE' : 'LIVE MODE 10.10.2026'}</span>
     </button>
   );
 };

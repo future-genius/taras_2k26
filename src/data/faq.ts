@@ -14,7 +14,7 @@ export const MOCK_FAQ: FAQItem[] = [
     categoryId: 'cat-general',
     categoryName: 'General',
     question: 'When and where will TARAS 2K26 take place?',
-    answer: 'TARAS 2K26 will take place on Saturday, 26th September 2026 at the SRM Valliammai Engineering College campus, Kattankulathur, Chengalpattu District.',
+    answer: 'TARAS 2K26 will take place on Saturday, 10th October 2026 at the SRM Valliammai Engineering College campus, Kattankulathur, Chengalpattu District.',
   },
   {
     id: 'faq-03',
@@ -36,7 +36,7 @@ export const MOCK_FAQ: FAQItem[] = [
     id: 'faq-05',
     categoryId: 'cat-reg',
     categoryName: 'Registration',
-    question: 'Will on-spot registration be available on 26th September?',
+    question: 'Will on-spot registration be available on 10th October?',
     answer: 'On-spot registration will be open from 08:00 AM to 09:15 AM at the Ground Floor Registration Desk, subject to seat availability.',
   },
   {

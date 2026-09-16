@@ -7,6 +7,8 @@ import { MOCK_EVENTS } from '../data/events';
 import { MOCK_ANNOUNCEMENTS } from '../data/announcements';
 import { useIntersectionObserver } from '../hooks/useIntersectionObserver';
 import { useAuth } from '../context/AuthContext';
+import { RegistrationPamphletModal } from '../components/registration/RegistrationPamphletModal';
+import { LiveAnnouncementWidget } from '../components/common/LiveAnnouncementWidget';
 import heroCinematic from '../assets/hero-cinematic.jpg';
 import {
   Cpu,
@@ -58,7 +60,6 @@ export const Home: React.FC = () => {
   const pillars = [
     { label: 'TECH TALKS', icon: <Cpu className="w-5 h-5 text-white group-hover:text-[#dc2626] transition-colors" /> },
     { label: 'COMPETITIONS', icon: <Users className="w-5 h-5 text-white group-hover:text-[#dc2626] transition-colors" /> },
-    { label: 'WORKSHOPS', icon: <Lightbulb className="w-5 h-5 text-white group-hover:text-[#dc2626] transition-colors" /> },
     { label: 'EXCITING PRIZES', icon: <Trophy className="w-5 h-5 text-white group-hover:text-[#dc2626] transition-colors" /> },
   ];
 
@@ -262,7 +263,7 @@ export const Home: React.FC = () => {
           <span className="text-[#dc2626]">•</span>
           <span>SRM VALLIAMMAI ENGINEERING COLLEGE</span>
           <span className="text-[#dc2626]">•</span>
-          <span>26 SEPTEMBER 2026</span>
+          <span>10 OCTOBER 2026</span>
           <span className="text-[#dc2626]">•</span>
           <span>6 CHAMPIONSHIP TRACKS</span>
           <span className="text-[#dc2626]">•</span>
@@ -278,7 +279,7 @@ export const Home: React.FC = () => {
           <span className="text-[#dc2626]">•</span>
           <span>SRM VALLIAMMAI ENGINEERING COLLEGE</span>
           <span className="text-[#dc2626]">•</span>
-          <span>26 SEPTEMBER 2026</span>
+          <span>10 OCTOBER 2026</span>
           <span className="text-[#dc2626]">•</span>
           <span>6 CHAMPIONSHIP TRACKS</span>
           <span className="text-[#dc2626]">•</span>
@@ -305,7 +306,7 @@ export const Home: React.FC = () => {
             </h3>
             <div className="flex flex-wrap items-center justify-center lg:justify-start gap-4 text-xs font-mono text-slate-400 pt-1">
               <span className="flex items-center gap-1.5 text-slate-200">
-                <Calendar className="w-3.5 h-3.5 text-[#dc2626]" /> 26 SEPTEMBER 2026
+                <Calendar className="w-3.5 h-3.5 text-[#dc2626]" /> 10 OCTOBER 2026
               </span>
               <span>•</span>
               <span className="flex items-center gap-1.5 text-slate-200">
@@ -418,42 +419,11 @@ export const Home: React.FC = () => {
           SECTION 5: LIVE SYMPOSIUM DISPATCHES TICKER
          ───────────────────────────────────────────────────────────── */}
       <RevealSection className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-[#dc2626]/40 space-y-5">
-          <div className="flex items-center justify-between border-b border-white/10 pb-4">
-            <div className="flex items-center gap-2.5">
-              <span className="relative flex h-2.5 w-2.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#dc2626] opacity-75" />
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#dc2626]" />
-              </span>
-              <span className="font-mono-tech text-xs font-bold text-white uppercase tracking-widest">
-                LIVE DISPATCHES &amp; SYMPOSIUM BROADCASTS
-              </span>
-            </div>
-            <Link
-              to="/announcements"
-              className="text-xs font-mono font-bold text-[#dc2626] hover:underline flex items-center gap-1 uppercase group"
-            >
-              All Updates <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-            </Link>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {MOCK_ANNOUNCEMENTS.slice(0, 2).map((ann) => (
-              <div
-                key={ann.id}
-                className="p-5 rounded-2xl bg-[#0a0c10]/90 border border-slate-800 hover:border-[#dc2626]/60 hover:shadow-[0_0_20px_rgba(220,38,38,0.2)] hover:-translate-y-1 transition-all space-y-2"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-mono-tech text-[#dc2626] font-bold uppercase">{ann.category}</span>
-                  <span className="text-[10px] font-mono text-slate-500">{new Date(ann.timestamp).toLocaleDateString()}</span>
-                </div>
-                <h4 className="text-sm font-bold text-white font-mono">{ann.title}</h4>
-                <p className="text-xs text-slate-400 line-clamp-2 font-light">{ann.message}</p>
-              </div>
-            ))}
-          </div>
-        </div>
+        <LiveAnnouncementWidget limitCount={2} />
       </RevealSection>
+
+      {/* Registration Journey Pamphlet Modal */}
+      <RegistrationPamphletModal />
     </div>
   );
 };

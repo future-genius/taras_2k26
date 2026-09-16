@@ -9,13 +9,13 @@
  * 5. Payment proof submission
  *
  * PAYMENT MODEL:
- * - BASE_FEE_PER_PERSON = ₹150
- * - First event registration: teamMemberCount × ₹150
+ * - BASE_FEE_PER_PERSON = ₹200
+ * - First event registration: teamMemberCount × ₹200
  * - Subsequent events (same team, already has VERIFIED payment): ₹0
  *
  * SECURITY:
  * - calculatedFee is NEVER trusted from the browser
- * - feePerPerson is always ₹150 (hardcoded in server logic)
+ * - feePerPerson is always ₹200 (hardcoded in server logic)
  * - paymentStatus = VERIFIED can only be set by registration_staff / admin
  * - isFirstPayment is determined by Firestore query, not client state
  */
@@ -32,7 +32,7 @@ import {
 import { auth, firestore } from '../config/firebase';
 import type { EventRegistration, PaymentStatus } from '../types/registration';
 import type { EventTeam } from '../types/team';
-import { isInternalStudent } from '../utils/college';
+import { isInternalStudent, normalizeRegNo, isInternalRegNo, getParticipantType } from '../utils/college';
 
 /** ₹200 per event registration — authoritative constant */
 export const BASE_FEE_PER_PERSON = 200;
@@ -44,7 +44,7 @@ export const BASE_FEE_PER_PERSON = 200;
 /**
  * Check whether a team has an existing VERIFIED payment in Firestore.
  *
- * A team's first event registration charges teamMemberCount × ₹150.
+ * A team's first event registration charges teamMemberCount × ₹200.
  * Once that payment is verified, ALL subsequent event registrations
  * for the SAME team are ₹0.
  *
@@ -66,7 +66,7 @@ export async function checkTeamHasVerifiedPayment(teamId: string): Promise<boole
  * Calculate the event registration fee for a team.
  *
  * @returns { fee, isFirstPayment }
- * - fee: ₹0 if team already has a verified payment, else teamMemberCount × ₹150
+ * - fee: ₹0 if team already has a verified payment, else teamMemberCount × ₹200
  * - isFirstPayment: true if this will be the team's first payment
  */
 export async function calculateEventFee(
@@ -215,10 +215,18 @@ export async function createEventRegistration(
   const teamMemberCount = team?.memberCount ?? 1;
 
   // Check 3-event limit
-  const userRegs = await getParticipantRegistrations(effectiveUid);
-  const activeUserRegs = userRegs.filter((r) => r.status !== 'CANCELLED' && r.status !== 'REJECTED');
-  if (activeUserRegs.length >= 3) {
-    throw new Error('Maximum limit of 3 registered events reached. You cannot register for more than 3 events.');
+  if (teamId) {
+    const teamRegs = await getTeamRegistrations(teamId);
+    const activeTeamRegs = teamRegs.filter((r) => r.status !== 'CANCELLED' && r.status !== 'REJECTED');
+    if (activeTeamRegs.length >= 3) {
+      throw new Error('This team has already registered for the maximum of 3 events.');
+    }
+  } else {
+    const userRegs = await getParticipantRegistrations(effectiveUid);
+    const activeUserRegs = userRegs.filter((r) => r.status !== 'CANCELLED' && r.status !== 'REJECTED');
+    if (activeUserRegs.length >= 3) {
+      throw new Error('Maximum limit of 3 registered events reached. You cannot register for more than 3 events.');
+    }
   }
 
   // Duplicate registration check (pre-transaction for UX — Firestore transaction will double-check)
@@ -257,16 +265,34 @@ export async function createEventRegistration(
     if (!partSnap.exists()) throw new Error('Participant profile not found. Please log in again.');
     const partData = partSnap.data();
 
-    // Check Internal Student Eligibility
-    const isInternal = isInternalStudent(partData.college);
-    if (isInternal && eventId !== 'taras-01') {
-      throw new Error(
-        'Internal college students are allowed to register ONLY for the Paper Presentation event.'
-      );
+    // Validate Registration Number & derive Participant Type
+    const regNo = normalizeRegNo(partData.registrationNumber);
+    if (!regNo) {
+      throw new Error('Registration number is required on participant profile. Please update your profile.');
+    }
+    const isInternal = isInternalRegNo(regNo);
+    const participantType = getParticipantType(regNo);
+
+    // Event eligibility checks:
+    // Internal participants (Reg No starting with 14222) can register ONLY for Paper-X-Verse Internal (taras-01-int)
+    const isInternalPaperEvent = eventId === 'taras-01-int' || eventId === 'paper-x-verse-internal';
+
+    if (isInternal) {
+      if (!isInternalPaperEvent) {
+        throw new Error(
+          'Internal college participants (Reg No starting with 14222) are allowed to register ONLY for PAPER-X-VERSE — INTERNAL.'
+        );
+      }
+    } else {
+      if (isInternalPaperEvent) {
+        throw new Error(
+          'External participants cannot register for PAPER-X-VERSE — INTERNAL. Please select PAPER-X-VERSE — EXTERNAL or another external event.'
+        );
+      }
     }
 
-    // Determine fee: Internal Paper Presentation = ₹0 (Free); All other paid registrations = ₹200
-    const calculatedFee = (isInternal && eventId === 'taras-01') ? 0 : BASE_FEE_PER_PERSON;
+    // Determine fee: Paper-X-Verse Internal = ₹0 (Free); Paid registrations = ₹200
+    const calculatedFee = (isInternal && isInternalPaperEvent) ? 0 : BASE_FEE_PER_PERSON;
     const feePerPerson = BASE_FEE_PER_PERSON;
     const isFirstPayment = true;
 
@@ -276,6 +302,8 @@ export async function createEventRegistration(
     createdReg = {
       registrationId,
       participantId,
+      registrationNumber: regNo,
+      participantType,
       uid: effectiveUid,
       eventId,
       eventName,
@@ -297,7 +325,7 @@ export async function createEventRegistration(
       certificateEligible: false,
     };
 
-    // For team events, verify team state
+    // For team events, verify team state & max 3 event limit
     let teamData: EventTeam | null = null;
     if (teamRef) {
       const teamSnap = await transaction.get(teamRef);
@@ -323,12 +351,26 @@ export async function createEventRegistration(
       updatedAt: serverTimestamp(),
     });
 
-    // 2. Lock team composition if this is a team event and not yet locked
-    if (teamRef && teamData && !teamData.eventRegistrationStarted) {
+    // 2. Lock team composition & store registered event on team document so all members see it
+    if (teamRef && teamData) {
+      const existingTeamEvents = (teamData as any).registeredEvents || [];
+      const updatedTeamEvents = [
+        ...existingTeamEvents.filter((e: any) => e.eventId !== eventId),
+        {
+          eventId,
+          eventName,
+          category: eventCategory,
+          registrationId,
+          status: registrationStatus,
+          registeredAt: now,
+        },
+      ];
+
       transaction.update(teamRef, {
         eventRegistrationStarted: true,
         status: 'LOCKED',
-        lockedAt: now,
+        registeredEvents: updatedTeamEvents,
+        lockedAt: (teamData as any).lockedAt || now,
         updatedAt: serverTimestamp(),
       });
     }

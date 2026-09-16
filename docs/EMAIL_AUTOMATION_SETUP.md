@@ -88,11 +88,11 @@ Brevo Free provides 300 free transactional emails per day.
 - No duplicate emails will ever be sent because `email_deliveries` tracks every delivered ID.
 
 ### Countdown Reminder Schedule
-Calculated in Indian Standard Time (`Asia/Kolkata`) relative to **26 September 2026**:
-- **7 Days To Go**: Active from Sept 19, 2026.
-- **3 Days To Go**: Active from Sept 23, 2026.
-- **1 Day To Go**: Active from Sept 25, 2026.
-- **0 Days To Go (Event Day)**: Active on Sept 26, 2026.
+Calculated in Indian Standard Time (`Asia/Kolkata`) relative to **10 October 2026**:
+- **7 Days To Go**: Active from Oct 3, 2026.
+- **3 Days To Go**: Active from Oct 7, 2026.
+- **1 Day To Go**: Active from Oct 9, 2026.
+- **0 Days To Go (Event Day)**: Active on Oct 10, 2026.
 
 ---
 

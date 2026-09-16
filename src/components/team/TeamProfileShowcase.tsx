@@ -129,10 +129,6 @@ export const TeamProfileShowcase: React.FC<TeamProfileShowcaseProps> = ({
 
   if (!currentMember) return null;
 
-  // Format index string (e.g. 01 / 06)
-  const formattedCurrentIndex = String(currentIndex + 1).padStart(2, '0');
-  const formattedTotalCount = String(totalMembers).padStart(2, '0');
-
   // Animation variants for card slide + 3D holographic rotation
   const containerVariants = {
     enter: (dir: number) => ({
@@ -378,7 +374,7 @@ export const TeamProfileShowcase: React.FC<TeamProfileShowcaseProps> = ({
 
             {/* ── RIGHT COLUMN: Executive Details & Metadata ── */}
             <div className="lg:col-span-6 space-y-6 text-left">
-              {/* Category Counter & Tag */}
+              {/* Category Tag */}
               <motion.div
                 custom={0}
                 variants={textChildVariants}
@@ -389,12 +385,6 @@ export const TeamProfileShowcase: React.FC<TeamProfileShowcaseProps> = ({
                   <span className="text-xs font-mono font-extrabold text-slate-300 uppercase tracking-widest">
                     ORGANIZING COMMITTEE
                   </span>
-                </div>
-
-                <div className="text-right font-mono">
-                  <span className="text-2xl font-black text-[#dc2626]">{formattedCurrentIndex}</span>
-                  <span className="text-slate-600 font-bold mx-1">/</span>
-                  <span className="text-sm font-bold text-slate-400">{formattedTotalCount}</span>
                 </div>
               </motion.div>
 
@@ -550,7 +540,6 @@ export const TeamProfileShowcase: React.FC<TeamProfileShowcaseProps> = ({
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
           {members.map((member, idx) => {
             const isSelected = idx === currentIndex;
-            const indexStr = String(idx + 1).padStart(2, '0');
 
             return (
               <button
@@ -574,10 +563,7 @@ export const TeamProfileShowcase: React.FC<TeamProfileShowcaseProps> = ({
                   />
                 )}
 
-                <div className="flex items-center justify-between text-[10px] font-mono relative z-10">
-                  <span className={isSelected ? 'text-[#dc2626] font-extrabold' : 'text-slate-500'}>
-                    #{indexStr}
-                  </span>
+                <div className="flex items-center justify-end text-[10px] font-mono relative z-10">
                   {isSelected ? (
                     <UserCheck className="w-3.5 h-3.5 text-[#dc2626]" />
                   ) : (

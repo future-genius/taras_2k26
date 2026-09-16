@@ -39,11 +39,17 @@ export const EventCard: React.FC<EventCardProps> = ({ event, onRegisterClick }) 
             <Award className="w-3.5 h-3.5 text-[#b91c1c] shrink-0" />
             <span>Top Prize: {event.prizes[0]?.amount || 'Trophies + Certificates'}</span>
           </div>
+          {event.eventHead && (
+            <div className="col-span-2 text-[11px] font-mono text-slate-300 bg-[#0a0c10] p-2 rounded-xl border border-slate-800 flex flex-wrap items-center justify-between gap-1">
+              <span>Event Head: <strong className="text-white">{event.eventHead.name}</strong></span>
+              <span className="text-[#b91c1c] font-bold">{event.eventHead.phone}</span>
+            </div>
+          )}
         </div>
 
         {/* Action Buttons */}
         <div className="flex items-center gap-2 pt-2 border-t border-white/10">
-          <Link to={`/events/${event.id}`} className="flex-1">
+          <Link to={`/events/${event.slug}`} className="flex-1">
             <Button variant="outline" size="sm" className="w-full justify-center" icon={<ChevronRight className="w-3.5 h-3.5" />}>
               Details
             </Button>

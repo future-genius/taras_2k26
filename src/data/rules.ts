@@ -11,7 +11,7 @@ export const MOCK_RULES: RuleSection[] = [
     items: [
       'TARAS 2K26 is open to undergraduate and postgraduate engineering students holding a valid college identity card.',
       'All participants must bring their physical college ID card alongside their digital TARAS entry pass.',
-      'Symposium gates open at 08:00 AM IST on 26th September 2026. Reporting after 09:30 AM may forfeit event eligibility.',
+      'Symposium gates open at 08:00 AM IST on 10th October 2026. Reporting after 09:30 AM may forfeit event eligibility.',
       'Standard formal or decent casual dress code according to SRM Valliammai guidelines must be maintained.',
     ],
   },

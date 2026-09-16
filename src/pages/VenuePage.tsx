@@ -151,7 +151,7 @@ export const VenuePage: React.FC = () => {
                 {copiedCoords ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-[#ff2b2b]" />}
                 {copiedCoords ? 'GPS COORDS COPIED!' : '12.8252° N, 80.0460° E'}
               </button>
-              <Badge variant="crimson" size="md">LIVE ARENA 26 SEPT</Badge>
+              <Badge variant="crimson" size="md">LIVE ARENA 10 OCT</Badge>
             </div>
           </div>
 

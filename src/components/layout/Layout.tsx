@@ -14,6 +14,8 @@ import { LiveModeProvider } from '../visual/LiveModeToggle';
 import { QRPassVisual } from '../visual/QRPassVisual';
 import { SpideyWidget } from '../visual/SpideyWidget';
 import { ParticipantMobileBottomNav } from './ParticipantNav';
+import { OfflineBanner } from '../common/OfflineBanner';
+import { BackToTop } from '../common/BackToTop';
 import { Shield, CheckCircle2 } from 'lucide-react';
 
 export const Layout: React.FC = () => {
@@ -46,6 +48,9 @@ export const Layout: React.FC = () => {
     <LiveModeProvider>
       <SpiderSenseProvider>
         <div className="min-h-screen flex flex-col bg-[#050608] text-slate-100 relative selection:bg-[#3f0000] selection:text-white">
+          {/* Global Offline Network Banner */}
+          <OfflineBanner />
+
           {/* Interactive Spider Web particle canvas */}
           <SpiderCanvas density={50} />
 
@@ -65,7 +70,7 @@ export const Layout: React.FC = () => {
           />
 
           {/* Main Content Viewport with page transitions */}
-          <main className="flex-grow pt-24 relative z-10">
+          <main className="flex-grow pt-24 pb-20 lg:pb-0 relative z-10">
             <AnimatePresence mode="wait" initial={false}>
               <PageTransition key={location.pathname}>
                 <Outlet context={{ openRegistration: () => setIsRegisterModalOpen(true) }} />
@@ -75,6 +80,9 @@ export const Layout: React.FC = () => {
 
           {/* Mobile Bottom Navigation Bar */}
           <ParticipantMobileBottomNav />
+
+          {/* Back to top floating button */}
+          <BackToTop />
 
           {/* Footer */}
           <Footer />

@@ -123,3 +123,32 @@ export const accordionContent: Variants = {
     transition: { duration: reduced ? 0 : 0.35, ease: easeCustom },
   },
 };
+
+/** Mobile Drawer slide in from right */
+export const drawerSlideRight: Variants = {
+  hidden: { opacity: reduced ? 1 : 0, x: reduced ? 0 : '100%' },
+  visible: {
+    opacity: 1,
+    x: 0,
+    transition: { duration: reduced ? 0 : 0.32, ease: easeCustom },
+  },
+  exit: {
+    opacity: reduced ? 1 : 0,
+    x: reduced ? 0 : '100%',
+    transition: { duration: reduced ? 0 : 0.25, ease: [0.4, 0, 1, 1] },
+  },
+};
+
+/** Simple Fast Fade */
+export const fadeInFast: Variants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: { duration: reduced ? 0 : 0.25, ease: easeCustom },
+  },
+  exit: {
+    opacity: 0,
+    transition: { duration: reduced ? 0 : 0.18, ease: 'easeIn' },
+  },
+};
+

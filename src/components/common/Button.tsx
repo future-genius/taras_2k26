@@ -42,8 +42,9 @@ export const Button: React.FC<ButtonProps> = ({
 
   return (
     <motion.button
-      whileHover={{ scale: 1.02 }}
-      whileTap={{ scale: 0.98 }}
+      whileHover={{ scale: 1.025, y: -1 }}
+      whileTap={{ scale: 0.97 }}
+      transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
       className={twMerge(clsx(baseStyles, sizes[size], variants[variant], className))}
       {...props}
     >

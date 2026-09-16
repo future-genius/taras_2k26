@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useParams, useOutletContext, Navigate } from 'react-router-dom';
-import { MOCK_EVENTS } from '../data/events';
+import { MOCK_EVENTS, getEventBySlug, getEventById } from '../data/events';
 import { EventDetailView } from '../components/events/EventDetailView';
 import { VisualAtmosphere } from '../components/visual/VisualAtmosphere';
 
@@ -8,7 +8,17 @@ export const EventDetail: React.FC = () => {
   const { eventId } = useParams<{ eventId: string }>();
   const { openRegistration } = useOutletContext<{ openRegistration: () => void }>();
 
-  const event = MOCK_EVENTS.find((e) => e.id === eventId || e.slug === eventId);
+  const param = eventId || '';
+  const event = getEventBySlug(param) || getEventById(param) || MOCK_EVENTS.find((e) => e.id === param || e.slug === param);
+
+  useEffect(() => {
+    if (event) {
+      document.title = `${event.name} | TARAS 2K26 ECE Symposium`;
+    }
+    return () => {
+      document.title = 'TARAS 2K26 — National Technical Symposium';
+    };
+  }, [event]);
 
   if (!event) {
     return <Navigate to="/events" replace />;

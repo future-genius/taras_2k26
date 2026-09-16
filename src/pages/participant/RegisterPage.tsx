@@ -25,16 +25,23 @@ export const RegisterPage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
+
+    const trimmedRegNo = registrationNumber.trim();
+    if (!trimmedRegNo) {
+      setErrorMessage('Registration Number is mandatory. Please enter a valid registration number.');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       await register(email, password, {
-        fullName,
-        phone,
-        college,
-        department,
+        fullName: fullName.trim(),
+        phone: phone.trim(),
+        college: college.trim(),
+        department: department.trim(),
         year,
-        section,
-        registrationNumber,
+        section: section.trim(),
+        registrationNumber: trimmedRegNo,
       });
       navigate('/participant/dashboard');
     } catch (err: any) {
@@ -211,11 +218,12 @@ export const RegisterPage: React.FC = () => {
 
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 font-mono">
-                  Reg No
+                  Reg No <span className="text-[#b91c1c]">*</span>
                 </label>
                 <input
                   type="text"
-                  placeholder="3122..."
+                  required
+                  placeholder="e.g. 1422200001 or 3122..."
                   value={registrationNumber}
                   onChange={(e) => setRegistrationNumber(e.target.value)}
                   className="w-full px-3 py-2.5 bg-[#0a0c10]/90 border border-[#b91c1c]/40 rounded-xl text-xs text-white focus:outline-none"

@@ -3,7 +3,6 @@ export type CertificateType =
   | 'Winner Certificate'
   | 'Runner-up Certificate'
   | 'Special Recognition Certificate'
-  | 'Workshop Certificate'
   | 'Volunteer Certificate'
   | 'Coordinator Certificate';
 

@@ -30,7 +30,7 @@ export const MOCK_PROCEEDINGS: ProceedingItem[] = [
     papersCount: 38,
     isbn: '978-93-89123-12-8',
     downloadUrlPlaceholder: '#download-taras-2024-souvenir',
-    description: 'Volume 12 of the SRM Valliammai ECE National Symposium Proceedings showcasing student research papers and workshop summaries.',
+    description: 'Volume 12 of the SRM Valliammai ECE National Symposium Proceedings showcasing student research papers.',
     editors: ['Dr. S. Ramesh', 'Dr. V. Suresh'],
   },
   {
@@ -42,6 +42,6 @@ export const MOCK_PROCEEDINGS: ProceedingItem[] = [
     isbn: '978-93-90000-26-0 (Reserved)',
     downloadUrlPlaceholder: '#upcoming-taras-2k26-proceedings',
     description: 'All selected high-scoring papers from Paper-X-Verse 2026 will be compiled into the official ISBN indexed TARAS 2K26 E-Souvenir.',
-    editors: ['Dr. Komala', 'Dr. G. Uresh Kumar'],
+    editors: ['DR. KOMALA JAMES', 'DR. G. URESH KUMAR'],
   },
 ];

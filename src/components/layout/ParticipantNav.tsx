@@ -60,9 +60,9 @@ export const HeaderUserMenu: React.FC = () => {
     return (
       <Link
         to="/participant/login"
-        className="px-3.5 py-1.5 rounded-lg bg-[#1a0000] border border-[#b91c1c]/60 text-xs font-mono font-bold text-white hover:bg-[#b91c1c] transition-all"
+        className="px-2.5 sm:px-3.5 py-1.5 rounded-lg bg-[#1a0000] border border-[#b91c1c]/60 text-xs font-mono font-bold text-white hover:bg-[#b91c1c] transition-all shrink-0"
       >
-        Sign In / Register
+        Sign In
       </Link>
     );
   }
@@ -87,10 +87,10 @@ export const HeaderUserMenu: React.FC = () => {
   const badge = getRoleBadge();
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
       <Link
         to="/participant/pass"
-        className="p-2 rounded-lg bg-[#1a0000] border border-[#b91c1c]/60 text-[#b91c1c] hover:text-white transition-colors"
+        className="p-2 rounded-lg bg-[#1a0000] border border-[#b91c1c]/60 text-[#b91c1c] hover:text-white transition-colors shrink-0"
         title="My Scannable QR Pass"
       >
         <QrCode className="w-4 h-4" />
@@ -98,9 +98,9 @@ export const HeaderUserMenu: React.FC = () => {
 
       <Link
         to={getDashboardPath()}
-        className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#0a0c10] border border-[#b91c1c]/40 hover:border-[#b91c1c] transition-all"
+        className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg bg-[#0a0c10] border border-[#b91c1c]/40 hover:border-[#b91c1c] transition-all shrink-0"
       >
-        <div className="w-6 h-6 rounded-full bg-[#1a0000] text-[#b91c1c] font-mono font-bold text-xs flex items-center justify-center border border-[#b91c1c]/60">
+        <div className="w-6 h-6 rounded-full bg-[#1a0000] text-[#b91c1c] font-mono font-bold text-xs flex items-center justify-center border border-[#b91c1c]/60 shrink-0">
           {participantProfile.fullName.charAt(0).toUpperCase()}
         </div>
         <span className="text-xs font-mono font-bold text-white max-w-[90px] truncate hidden sm:inline">
@@ -119,11 +119,11 @@ export const HeaderUserMenu: React.FC = () => {
 
       <button
         onClick={logout}
-        className="p-2 rounded-lg bg-[#0a0c10] border border-slate-800 text-slate-400 hover:text-red-400 hover:border-red-600 transition-colors flex items-center gap-1.5 text-xs font-mono"
+        className="hidden sm:flex px-2.5 py-1.5 rounded-lg bg-[#1a0000] border border-red-900/80 text-red-400 hover:text-white hover:bg-red-950 transition-colors items-center gap-1 text-xs font-mono font-bold shrink-0"
         title="Sign Out of TARAS"
       >
-        <LogOut className="w-4 h-4 text-red-500" />
-        <span className="hidden xl:inline text-[11px] font-bold">Logout</span>
+        <LogOut className="w-3.5 h-3.5 text-red-500" />
+        <span className="text-[10px] font-bold">Logout</span>
       </button>
     </div>
   );

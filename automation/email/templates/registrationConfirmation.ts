@@ -5,7 +5,7 @@ export interface RegistrationEmailData {
   college: string;
   department: string;
   registeredEvents: string[];
-  eventDate: string; // e.g. "26 September 2026"
+  eventDate: string; // e.g. "10 October 2026"
   venue: string;     // e.g. "SRM Valliammai Engineering College, Chennai"
 }
 
@@ -99,7 +99,7 @@ export function generateRegistrationConfirmationEmail(data: RegistrationEmailDat
                 <ul style="margin: 0; padding-left: 20px; font-size: 14px; color: #cccccc; line-height: 1.6;">
                   <li>Bring your official College ID card on event day.</li>
                   <li>Present your <strong>Participant ID (${escapeHtml(data.participantId)})</strong> or QR Pass at the registration desk.</li>
-                  <li>Venue check-in opens at <strong>08:30 AM IST</strong> on 26 September 2026.</li>
+                  <li>Venue check-in opens at <strong>08:30 AM IST</strong> on 10 October 2026.</li>
                   <li>Please arrive on time for inaugural instructions and event briefing.</li>
                 </ul>
               </div>
@@ -144,7 +144,7 @@ ${data.registeredEvents.map(e => `- ${e}`).join('\n')}
 Check-In Instructions:
 1. Bring your official College ID card on event day.
 2. Present your Participant ID (${data.participantId}) at the desk.
-3. Venue check-in opens at 08:30 AM IST on 26 September 2026.
+3. Venue check-in opens at 08:30 AM IST on 10 October 2026.
 
 Contact / Support: taras2k26@valliammai.edu.in
 SRM Valliammai Engineering College, Department of ECE`;

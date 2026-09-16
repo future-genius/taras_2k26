@@ -36,7 +36,7 @@ export const Footer: React.FC = () => {
             </p>
 
             <div className="flex items-center gap-2 text-xs font-mono text-[#991b1b] bg-[#0a0c10] border border-[#1a0000]/60 px-3 py-2 rounded-lg w-fit">
-              <span>Event Date: 26 SEPTEMBER 2026</span>
+              <span>Event Date: 10 OCTOBER 2026</span>
             </div>
           </div>
 
@@ -62,34 +62,43 @@ export const Footer: React.FC = () => {
           {/* Resources */}
           <div>
             <h4 className="text-slate-300 font-bold text-xs tracking-wider uppercase mb-4 border-l-2 border-[#3f0000] pl-2">
-              Resources
+              Resources & Support
             </h4>
             <ul className="space-y-2.5 text-xs">
               {[
                 { to: '/rules', label: 'Rules & Regulations' },
                 { to: '/faq', label: 'Categorized FAQ' },
+                { to: '/support', label: 'Help & Support Center' },
                 { to: '/venue', label: 'Campus Map & Directions' },
                 { to: '/results', label: 'Symposium Podium' },
               ].map((l) => (
                 <li key={l.to}>
-                  <Link to={l.to} className="hover:text-[#991b1b] transition-colors">{l.label}</Link>
+                  <Link to={l.to} className="hover:text-[#dc2626] transition-colors">{l.label}</Link>
                 </li>
               ))}
             </ul>
           </div>
 
-          {/* Help Desk */}
+          {/* Help Desk & Legal */}
           <div>
             <h4 className="text-slate-300 font-bold text-xs tracking-wider uppercase mb-4 border-l-2 border-[#3f0000] pl-2">
-              Help Desk
+              Legal & Contact
             </h4>
-            <ul className="space-y-3 text-xs">
-              <li className="flex items-start gap-2">
-                <MapPin className="w-3.5 h-3.5 text-[#7f1d1d] shrink-0 mt-0.5" />
-                <span>SRM Valliammai Engineering College, Kattankulathur – 603203</span>
-              </li>
+            <ul className="space-y-2.5 text-xs mb-3">
+              {[
+                { to: '/privacy', label: 'Privacy Policy' },
+                { to: '/terms', label: 'Terms of Participation' },
+                { to: '/refund-policy', label: 'Refund Policy' },
+                { to: '/security', label: 'Security & Disclosures' },
+              ].map((l) => (
+                <li key={l.to}>
+                  <Link to={l.to} className="hover:text-[#dc2626] transition-colors">{l.label}</Link>
+                </li>
+              ))}
+            </ul>
+            <ul className="space-y-2 text-xs pt-2 border-t border-[#1a0000]">
               <li className="flex items-center gap-2">
-                <Mail className="w-3.5 h-3.5 text-[#7f1d1d] shrink-0" />
+                <Mail className="w-3.5 h-3.5 text-[#dc2626] shrink-0" />
                 <span>taras2k26@gmail.com</span>
               </li>
               <li>
@@ -97,9 +106,9 @@ export const Footer: React.FC = () => {
                   href="https://srmvalliammai.ac.in"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-[#7f1d1d] hover:text-[#991b1b] text-xs transition-colors"
+                  className="inline-flex items-center gap-1.5 text-[#dc2626] hover:underline text-xs transition-colors"
                 >
-                  <span>Official College Website</span>
+                  <span>SRM Valliammai Official Site</span>
                   <ExternalLink className="w-3 h-3" />
                 </a>
               </li>
@@ -108,11 +117,18 @@ export const Footer: React.FC = () => {
         </div>
 
         {/* Bottom Bar */}
-        <div className="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-600">
-          <p>© 2026 TARAS 2K26 • Department of ECE, SRM Valliammai. All rights reserved.</p>
-          <div className="flex items-center gap-1 font-mono">
-            <span>Built for</span>
-            <span className="text-[#7f1d1d] font-semibold">TARAS 2K26</span>
+        <div className="pt-8 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-slate-500">
+          <p>© 2026 TARAS 2K26 • Dept. of ECE, SRM Valliammai Engineering College.</p>
+          <div className="flex flex-wrap items-center justify-center gap-4 text-[11px] font-mono text-slate-400">
+            <Link to="/privacy" className="hover:text-white transition-colors">Privacy</Link>
+            <span>•</span>
+            <Link to="/terms" className="hover:text-white transition-colors">Terms</Link>
+            <span>•</span>
+            <Link to="/refund-policy" className="hover:text-white transition-colors">Refund Policy</Link>
+            <span>•</span>
+            <Link to="/security" className="hover:text-white transition-colors">Security</Link>
+            <span>•</span>
+            <Link to="/support" className="hover:text-white transition-colors">Support Desk</Link>
           </div>
         </div>
       </div>

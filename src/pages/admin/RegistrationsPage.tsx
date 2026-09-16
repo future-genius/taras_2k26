@@ -223,6 +223,7 @@ export const RegistrationsPage: React.FC = () => {
                   <th className="px-5 py-3.5">Registration ID</th>
                   <th className="px-5 py-3.5">Participant ID</th>
                   <th className="px-5 py-3.5">Event Track</th>
+                  <th className="px-5 py-3.5">Fee &amp; Payment</th>
                   <th className="px-5 py-3.5">Entry Type</th>
                   <th className="px-5 py-3.5">Status</th>
                   <th className="px-5 py-3.5">Attendance</th>
@@ -230,38 +231,54 @@ export const RegistrationsPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {filteredRegs.map((r) => (
-                  <tr key={r.registrationId} className="hover:bg-white/5 transition-colors">
-                    <td className="px-5 py-4 font-bold text-white">
-                      <div>{r.registrationId}</div>
-                    </td>
-                    <td className="px-5 py-4 text-[#b91c1c] font-bold">{r.participantId}</td>
-                    <td className="px-5 py-4 text-slate-200">
-                      <div className="font-bold">{r.eventName}</div>
-                      <span className="text-[10px] text-slate-500">{r.eventId}</span>
-                    </td>
-                    <td className="px-5 py-4 text-slate-300">
-                      {r.isTeamEvent ? (
-                        <span className="px-2 py-0.5 rounded bg-[#1a0000] text-[#b91c1c] border border-[#b91c1c]/40 text-[10px]">
-                          TEAM ({r.teamId || 'Forming'})
-                        </span>
-                      ) : (
-                        <span className="text-slate-400 text-[10px]">SOLO</span>
-                      )}
-                    </td>
-                    <td className="px-5 py-4">
-                      <Badge variant="red" size="sm">{r.status}</Badge>
-                    </td>
-                    <td className="px-5 py-4 text-slate-400">
-                      <Badge variant={r.eventAttendance === 'PRESENT' ? 'red' : 'slate'} size="sm">
-                        {r.eventAttendance || 'NOT_MARKED'}
-                      </Badge>
-                    </td>
-                    <td className="px-5 py-4 text-slate-400">
-                      {new Date(r.registeredAt).toLocaleDateString()}
-                    </td>
-                  </tr>
-                ))}
+                {filteredRegs.map((r) => {
+                  const isFree = r.calculatedFee === 0 || r.paymentStatus === 'NOT_REQUIRED' || r.eventId === 'taras-01-int';
+                  return (
+                    <tr key={r.registrationId} className="hover:bg-white/5 transition-colors">
+                      <td className="px-5 py-4 font-bold text-white">
+                        <div>{r.registrationId}</div>
+                      </td>
+                      <td className="px-5 py-4 text-[#b91c1c] font-bold">{r.participantId}</td>
+                      <td className="px-5 py-4 text-slate-200">
+                        <div className="font-bold">{r.eventName}</div>
+                        <span className="text-[10px] text-slate-500">{r.eventId}</span>
+                      </td>
+                      <td className="px-5 py-4">
+                        {isFree ? (
+                          <div>
+                            <span className="font-bold text-green-400">₹0 (FREE)</span>
+                            <div className="text-[10px] text-green-300/80">Not Required</div>
+                          </div>
+                        ) : (
+                          <div>
+                            <span className="font-bold text-white">₹{r.calculatedFee || r.feeAmount || 200}</span>
+                            <div className="text-[10px] text-amber-400">{r.paymentStatus || 'PENDING'}</div>
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-5 py-4 text-slate-300">
+                        {r.isTeamEvent ? (
+                          <span className="px-2 py-0.5 rounded bg-[#1a0000] text-[#b91c1c] border border-[#b91c1c]/40 text-[10px]">
+                            TEAM ({r.teamId || 'Forming'})
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 text-[10px]">SOLO</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-4">
+                        <Badge variant={r.status === 'CONFIRMED' ? 'green' : 'red'} size="sm">{r.status}</Badge>
+                      </td>
+                      <td className="px-5 py-4 text-slate-400">
+                        <Badge variant={r.eventAttendance === 'PRESENT' ? 'red' : 'slate'} size="sm">
+                          {r.eventAttendance || 'NOT_MARKED'}
+                        </Badge>
+                      </td>
+                      <td className="px-5 py-4 text-slate-400">
+                        {new Date(r.registeredAt).toLocaleDateString()}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
 

@@ -14,6 +14,7 @@ import { CertificatePreview } from '../../components/certificates/CertificatePre
 import { CertificateDownloadButton } from '../../components/certificates/CertificateDownloadButton';
 import { CertificateTemplate } from '../../components/certificates/CertificateTemplate';
 import { TeamHub } from '../../components/team/TeamHub';
+import { LiveAnnouncementWidget } from '../../components/common/LiveAnnouncementWidget';
 import type { CertificateRecord } from '../../types/certificate';
 import type { EventTeam, TeamJoinRequest } from '../../types/team';
 import {
@@ -454,6 +455,9 @@ export const ParticipantDashboard: React.FC = () => {
             </Link>
           )}
         </div>
+
+        {/* Live Broadcast Announcements Widget */}
+        <LiveAnnouncementWidget limitCount={3} />
 
         {/* Quick Action Bar */}
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">

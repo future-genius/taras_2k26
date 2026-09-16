@@ -21,6 +21,12 @@ const AnnouncementsPage     = lazy(() => import('./pages/AnnouncementsPage').the
 const ResultsPage           = lazy(() => import('./pages/ResultsPage').then(m => ({ default: m.ResultsPage })));
 const GalleryPage           = lazy(() => import('./pages/GalleryPage').then(m => ({ default: m.GalleryPage })));
 const ContactPage           = lazy(() => import('./pages/ContactPage').then(m => ({ default: m.ContactPage })));
+const SupportPage           = lazy(() => import('./pages/SupportPage').then(m => ({ default: m.SupportPage })));
+const RegistrationGuidePage = lazy(() => import('./pages/RegistrationGuidePage').then(m => ({ default: m.RegistrationGuidePage })));
+const PrivacyPage           = lazy(() => import('./pages/legal/PrivacyPage').then(m => ({ default: m.PrivacyPage })));
+const TermsPage             = lazy(() => import('./pages/legal/TermsPage').then(m => ({ default: m.TermsPage })));
+const RefundPage            = lazy(() => import('./pages/legal/RefundPage').then(m => ({ default: m.RefundPage })));
+const SecurityPage          = lazy(() => import('./pages/legal/SecurityPage').then(m => ({ default: m.SecurityPage })));
 const NotFoundPage          = lazy(() => import('./pages/NotFoundPage').then(m => ({ default: m.NotFoundPage })));
 const AccessDeniedPage      = lazy(() => import('./pages/AccessDeniedPage').then(m => ({ default: m.AccessDeniedPage })));
 
@@ -96,6 +102,9 @@ export const App: React.FC = () => {
               <Route path="rules" element={<RulesPage />} />
               <Route path="faq" element={<FAQPage />} />
               <Route path="venue" element={<VenuePage />} />
+              <Route path="registration-guide" element={<RegistrationGuidePage />} />
+              <Route path="pamphlet" element={<Navigate to="/registration-guide" replace />} />
+              <Route path="how-to-register" element={<Navigate to="/registration-guide" replace />} />
               <Route path="sponsors" element={<Navigate to="/events" replace />} />
               <Route path="announcements" element={<AnnouncementsPage />} />
               <Route path="results" element={<ResultsPage />} />
@@ -104,6 +113,11 @@ export const App: React.FC = () => {
               <Route path="verify-certificate" element={<CertificateVerificationPage />} />
               <Route path="gallery" element={<GalleryPage />} />
               <Route path="contact" element={<ContactPage />} />
+              <Route path="support" element={<SupportPage />} />
+              <Route path="privacy" element={<PrivacyPage />} />
+              <Route path="terms" element={<TermsPage />} />
+              <Route path="refund-policy" element={<RefundPage />} />
+              <Route path="security" element={<SecurityPage />} />
               <Route path="access-denied" element={<AccessDeniedPage />} />
 
               {/* Public Auth Pages */}

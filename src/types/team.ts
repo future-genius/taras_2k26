@@ -29,7 +29,7 @@ export interface EventTeam {
 
   /**
    * Authoritative member count set at team creation.
-   * Used for fee calculation: memberCount × ₹150.
+   * Used for fee calculation: memberCount × ₹200.
    * Cannot be changed after the team is created.
    */
   memberCount: number;

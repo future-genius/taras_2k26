@@ -203,6 +203,27 @@ export const MyEventsPage: React.FC = () => {
                       )}
                     </div>
 
+                    {/* Assigned Event Head Contact Block */}
+                    {ev.eventHead && (
+                      <div className="p-3 rounded-2xl bg-[#0a0c10] border border-[#b91c1c]/40 flex items-center gap-3 text-xs">
+                        {ev.eventHead.image && (
+                          <img
+                            src={ev.eventHead.image}
+                            alt={ev.eventHead.name}
+                            className="w-10 h-10 rounded-xl object-cover border border-[#b91c1c] shrink-0"
+                          />
+                        )}
+                        <div className="flex-1 min-w-0 space-y-0.5">
+                          <span className="text-[10px] text-slate-400 uppercase font-bold block font-mono">ASSIGNED EVENT HEAD</span>
+                          <div className="flex flex-wrap items-center justify-between text-white font-bold">
+                            <span className="truncate">{ev.eventHead.name}</span>
+                            <span className="text-[#b91c1c]">+91 {ev.eventHead.phone}</span>
+                          </div>
+                          <div className="text-[11px] text-slate-300 truncate font-mono">{ev.eventHead.email}</div>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Team Details Block */}
                     {ev.type === 'TEAM' && teamDoc && (
                       <div className="p-4 rounded-2xl bg-[#0a0c10] border border-[#b91c1c]/40 space-y-3">

@@ -28,10 +28,12 @@ export type PaymentStatus =
 export interface EventRegistration {
   registrationId: string;
   participantId: string;
+  registrationNumber?: string;
+  participantType?: 'internal' | 'external';
   uid: string;
   eventId: string;
   eventName: string;
-  category: 'TECHNICAL' | 'NON_TECHNICAL' | 'WORKSHOP' | 'HACKATHON';
+  category: 'TECHNICAL' | 'NON_TECHNICAL' | 'HACKATHON';
   isTeamEvent: boolean;
   teamId?: string;
   teamName?: string;
@@ -43,7 +45,7 @@ export interface EventRegistration {
   teamMemberCount?: number;
 
   /**
-   * Fee per person — always ₹150 (BASE_FEE_PER_PERSON).
+   * Fee per person — always ₹200 (BASE_FEE_PER_PERSON).
    * Set by server logic; participants cannot modify this.
    */
   feePerPerson?: number;
@@ -69,6 +71,7 @@ export interface EventRegistration {
   certificateEligible: boolean;
 
   // Payment lifecycle fields
+  paymentProofId?: string;
   feeAmount?: number;
   paymentStatus?: PaymentStatus;
   utrNumber?: string;
@@ -76,13 +79,33 @@ export interface EventRegistration {
   paymentScreenshotPath?: string;
   paymentScreenshotSize?: number;
   paymentScreenshotContentType?: string;
+  uploadedAt?: string;
+  uploadedAtIST?: string;
+  supabasePath?: string;
+  supabaseUploadStatus?: 'SUCCESS' | 'FAILED';
+  googleDriveFileId?: string;
+  googleDriveFolderId?: string;
+  googleDrivePath?: string;
+  googleDriveUploadStatus?: 'SUCCESS' | 'FAILED' | 'PENDING';
+  presidentOverrideAt?: string;
+  presidentOverrideBy?: string;
+  presidentOverrideAction?: string;
+  presidentOverrideReason?: string;
   paymentProof?: {
-    provider: 'supabase' | 'firebase';
+    paymentProofId?: string;
+    provider: 'supabase' | 'firebase' | 'firestore';
     bucket: string;
     path: string;
     fileSize?: number;
     contentType?: string;
     uploadedAt?: string;
+    uploadedAtIST?: string;
+    supabasePath?: string;
+    supabaseUploadStatus?: 'SUCCESS' | 'FAILED';
+    googleDriveFileId?: string;
+    googleDriveFolderId?: string;
+    googleDrivePath?: string;
+    googleDriveUploadStatus?: 'SUCCESS' | 'FAILED' | 'PENDING';
   };
   paymentSubmittedAt?: string;
   paymentVerifiedAt?: string;

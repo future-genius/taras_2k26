@@ -8,6 +8,7 @@ import { Badge } from '../../components/common/Badge';
 import { Modal } from '../../components/common/Modal';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import type { ParticipantProfile } from '../../types/participant';
+import { isInternalRegNo } from '../../utils/college';
 import {
   Users,
   Search,
@@ -296,6 +297,7 @@ export const ParticipantsPage: React.FC = () => {
                 <tr>
                   <th className="px-5 py-3.5">Participant</th>
                   <th className="px-5 py-3.5">Reg Number</th>
+                  <th className="px-5 py-3.5">Type</th>
                   <th className="px-5 py-3.5">Dept / Year / Sec</th>
                   <th className="px-5 py-3.5">Email & Phone</th>
                   <th className="px-5 py-3.5">Role</th>
@@ -306,6 +308,7 @@ export const ParticipantsPage: React.FC = () => {
               <tbody className="divide-y divide-white/5">
                 {filteredParticipants.map((p) => {
                   const isChecked = p.venueCheckIn || p.venueCheckInStatus === 'CHECKED_IN';
+                  const isInternal = p.participantType === 'internal' || isInternalRegNo(p.registrationNumber);
                   return (
                     <tr key={p.uid || p.participantId} className="hover:bg-white/5 transition-colors">
                       <td className="px-5 py-4 font-bold text-white">
@@ -313,6 +316,11 @@ export const ParticipantsPage: React.FC = () => {
                         <span className="text-[10px] font-mono text-[#b91c1c]">{p.participantId}</span>
                       </td>
                       <td className="px-5 py-4 text-slate-300 font-bold">{p.registrationNumber || 'N/A'}</td>
+                      <td className="px-5 py-4">
+                        <Badge variant={isInternal ? 'green' : 'slate'} size="sm">
+                          {isInternal ? 'INTERNAL' : 'EXTERNAL'}
+                        </Badge>
+                      </td>
                       <td className="px-5 py-4 text-slate-400">
                         {p.department || 'ECE'} • {p.year || 'III'} Year • Sec {p.section || 'A'}
                       </td>

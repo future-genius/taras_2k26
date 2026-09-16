@@ -24,7 +24,7 @@ export interface ComponentVisualAsset {
   id: string;
   title: string;
   imageUrl: string;
-  category: 'technical' | 'non-technical' | 'workshop' | 'hackathon' | 'general';
+  category: 'technical' | 'non-technical' | 'hackathon' | 'general';
   webTexture: string;
 }
 
@@ -181,11 +181,6 @@ export const EVENT_CATEGORY_VISUALS: Record<string, { image: string; pattern: st
     image: '/images/about/about-city.jpg',
     pattern: 'linear-gradient(135deg, rgba(153,27,27,0.3), transparent 80%)',
     accentGlow: 'rgba(153,27,27,0.35)',
-  },
-  workshop: {
-    image: '/images/hero/hero-cinematic.jpg',
-    pattern: 'radial-gradient(circle at bottom left, rgba(127,29,29,0.4), transparent 75%)',
-    accentGlow: 'rgba(127,29,29,0.4)',
   },
   hackathon: {
     image: '/images/timeline/timeline-web.jpg',

@@ -27,7 +27,9 @@ import {
   Search,
   Zap,
   Activity,
+  Download,
 } from 'lucide-react';
+import { PresidentTeamOverview } from '../../components/president/PresidentTeamOverview';
 
 export const PresidentControlPage: React.FC = () => {
   const { user } = useAuth();
@@ -40,7 +42,7 @@ export const PresidentControlPage: React.FC = () => {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   // Tabs
-  const [activeTab, setActiveTab] = useState<'hierarchy' | 'emergency' | 'audit'>('hierarchy');
+  const [activeTab, setActiveTab] = useState<'teams' | 'hierarchy' | 'emergency' | 'audit'>('teams');
 
   // Search & Filter
   const [searchQuery, setSearchQuery] = useState('');
@@ -504,6 +506,17 @@ export const PresidentControlPage: React.FC = () => {
         {/* ── SECTION 2: PRESIDENT NAVIGATION TABS ── */}
         <div className="flex items-center gap-3 border-b border-white/10 pb-2 overflow-x-auto no-scrollbar">
           <button
+            onClick={() => setActiveTab('teams')}
+            className={`px-4 py-2.5 rounded-xl text-xs font-mono font-bold uppercase transition-all flex items-center gap-2 whitespace-nowrap ${
+              activeTab === 'teams'
+                ? 'bg-amber-500/20 text-amber-300 border border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.3)]'
+                : 'text-slate-400 hover:text-white bg-[#0a0c10] border border-slate-800'
+            }`}
+          >
+            <Users className="w-3.5 h-3.5 text-amber-400" /> Team Operations &amp; Excel Export
+          </button>
+
+          <button
             onClick={() => setActiveTab('hierarchy')}
             className={`px-4 py-2.5 rounded-xl text-xs font-mono font-bold uppercase transition-all flex items-center gap-2 whitespace-nowrap ${
               activeTab === 'hierarchy'
@@ -511,7 +524,7 @@ export const PresidentControlPage: React.FC = () => {
                 : 'text-slate-400 hover:text-white bg-[#0a0c10] border border-slate-800'
             }`}
           >
-            <Users className="w-3.5 h-3.5 text-amber-400" /> Administrative Directory ({elevatedProfiles.length})
+            <ShieldCheck className="w-3.5 h-3.5 text-amber-400" /> Administrative Directory ({elevatedProfiles.length})
           </button>
 
           <button
@@ -536,6 +549,9 @@ export const PresidentControlPage: React.FC = () => {
             <ShieldAlert className="w-3.5 h-3.5 text-red-400" /> Presidential Audit Trail ({superAdminAuditLogs.length})
           </button>
         </div>
+
+        {/* ── TAB 0: TEAM OPERATIONS & EXCEL REPORTING ── */}
+        {activeTab === 'teams' && <PresidentTeamOverview />}
 
         {/* ── TAB 1: ADMINISTRATIVE HIERARCHY & ROLES ── */}
         {activeTab === 'hierarchy' && (

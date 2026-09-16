@@ -23,7 +23,7 @@ export const MOCK_ANNOUNCEMENTS: Announcement[] = [
   {
     id: 'ann-04',
     title: 'Participant QR Entry Desk Instructions',
-    message: 'Participants are advised to save their Digital Pass QR image offline prior to campus entry on 26th September.',
+    message: 'Participants are advised to save their Digital Pass QR image offline prior to campus entry on 10th October.',
     category: 'VENUE',
     timestamp: '2026-08-28T16:00:00Z',
     priority: 'URGENT',

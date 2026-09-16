@@ -1,4 +1,4 @@
-export type EventCategory = 'TECHNICAL' | 'NON-TECHNICAL' | 'WORKSHOP' | 'INDIVIDUAL' | 'TEAM';
+export type EventCategory = 'TECHNICAL' | 'NON-TECHNICAL' | 'INDIVIDUAL' | 'TEAM';
 
 export type EventStatus = 'UPCOMING' | 'REGISTRATION_OPEN' | 'REGISTRATION_CLOSED' | 'LIVE' | 'COMPLETED';
 
@@ -50,5 +50,15 @@ export interface TARASEvent {
   status: EventStatus;
   bannerImage?: string;
   registrationFee?: string;
+  allowInternal?: boolean;
+  allowExternal?: boolean;
   maxRegistrations?: number;
+  eventHead?: {
+    name: string;
+    phone: string;
+    email: string;
+    linkedin?: string;
+    instagram?: string;
+    image?: string;
+  };
 }

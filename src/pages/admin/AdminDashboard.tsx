@@ -519,7 +519,7 @@ export const AdminDashboard: React.FC = () => {
                 </div>
 
                 <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-                  {['ALL', 'TECHNICAL', 'NON-TECHNICAL', 'WORKSHOP'].map((cat) => (
+                  {['ALL', 'TECHNICAL', 'NON-TECHNICAL'].map((cat) => (
                     <button
                       key={cat}
                       onClick={() => setCategoryFilter(cat)}

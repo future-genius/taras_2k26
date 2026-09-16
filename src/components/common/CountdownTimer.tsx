@@ -6,16 +6,15 @@ import { numberFlip } from '../../motion/variants';
 const FlipNumber: React.FC<{ value: number }> = ({ value }) => {
   const display = String(value).padStart(2, '0');
   return (
-    <div className="relative h-14 sm:h-16 md:h-20 flex items-center justify-center overflow-hidden" style={{ perspective: '200px' }}>
-      <AnimatePresence mode="wait" initial={false}>
+    <div className="relative h-14 sm:h-16 md:h-20 flex items-center justify-center overflow-hidden w-full">
+      <AnimatePresence mode="popLayout" initial={false}>
         <motion.span
           key={display}
-          variants={numberFlip}
-          initial="initial"
-          animate="animate"
-          exit="exit"
-          className="absolute text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight text-white font-mono"
-          style={{ display: 'block' }}
+          initial={{ y: -16, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: 16, opacity: 0 }}
+          transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+          className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight text-white font-mono drop-shadow-[0_2px_10px_rgba(220,38,38,0.5)]"
         >
           {display}
         </motion.span>
@@ -25,7 +24,7 @@ const FlipNumber: React.FC<{ value: number }> = ({ value }) => {
 };
 
 export const CountdownTimer: React.FC = () => {
-  const { days, hours, minutes, seconds, isLive } = useCountdown('2026-09-26T09:00:00+05:30');
+  const { days, hours, minutes, seconds, isLive } = useCountdown('2026-10-10T09:00:00+05:30');
 
   if (isLive) {
     return (
@@ -35,7 +34,7 @@ export const CountdownTimer: React.FC = () => {
           <span className="relative inline-flex rounded-full h-3 w-3 bg-[#b91c1c]" />
         </span>
         <span className="text-lg md:text-xl font-extrabold tracking-widest text-white uppercase font-mono">
-          TARAS IS LIVE NOW
+          TARAS 2K26 IS LIVE
         </span>
       </div>
     );
@@ -43,9 +42,9 @@ export const CountdownTimer: React.FC = () => {
 
   const units = [
     { label: 'DAYS', value: days },
-    { label: 'HRS', value: hours },
-    { label: 'MIN', value: minutes },
-    { label: 'SEC', value: seconds },
+    { label: 'HOURS', value: hours },
+    { label: 'MINUTES', value: minutes },
+    { label: 'SECONDS', value: seconds },
   ];
 
   return (
