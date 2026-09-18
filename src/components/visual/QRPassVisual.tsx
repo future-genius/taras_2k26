@@ -22,7 +22,7 @@ export const QRPassVisual: React.FC<QRPassVisualProps> = ({
   college = 'METROPOLITAN INSTITUTE OF TECH',
   department = 'ECE',
   year = 'III',
-  section = 'A',
+  section = '',
   qrToken = 'QR-TARAS26-89421045-SECURE',
   registeredEvents = ['Web Weaver Hackathon', 'Cyber Net Warfare'],
   attendanceState = 'CONFIRMED',
@@ -110,9 +110,9 @@ export const QRPassVisual: React.FC<QRPassVisualProps> = ({
               <span className="text-white print-text-dark font-bold">{department}</span>
             </div>
             <div>
-              <span className="text-slate-400 print-text-dark uppercase">Yr/Sec: </span>
+              <span className="text-slate-400 print-text-dark uppercase">{section ? 'Yr/Sec: ' : 'Year: '}</span>
               <span className="text-white print-text-dark font-bold">
-                {year} / {section}
+                {section ? `${year} / ${section}` : year}
               </span>
             </div>
           </div>

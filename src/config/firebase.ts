@@ -33,6 +33,7 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   sendPasswordResetEmail,
+  updatePassword,
   signOut,
   onAuthStateChanged,
   type User,
@@ -96,13 +97,25 @@ import { getStorage } from "firebase/storage";
 // Do NOT put Firebase Admin SDK credentials/service-account private keys here.
 //
 
+const getEnvVar = (key: string): string => {
+  try {
+    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]) {
+      return import.meta.env[key];
+    }
+  } catch {}
+  if (typeof process !== 'undefined' && process.env && process.env[key]) {
+    return process.env[key] as string;
+  }
+  return '';
+};
+
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  apiKey: getEnvVar('VITE_FIREBASE_API_KEY'),
+  authDomain: getEnvVar('VITE_FIREBASE_AUTH_DOMAIN'),
+  projectId: getEnvVar('VITE_FIREBASE_PROJECT_ID'),
+  storageBucket: getEnvVar('VITE_FIREBASE_STORAGE_BUCKET'),
+  messagingSenderId: getEnvVar('VITE_FIREBASE_MESSAGING_SENDER_ID'),
+  appId: getEnvVar('VITE_FIREBASE_APP_ID'),
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -342,7 +355,8 @@ export const database = {
   subscribeDoc(
     col: string,
     docId: string,
-    callback: (data: Record<string, unknown> | null, exists: boolean) => void
+    callback: (data: Record<string, unknown> | null, exists: boolean) => void,
+    onError?: (error: Error) => void
   ): () => void {
     const docRef = doc(firestore, col, docId);
     return onSnapshot(
@@ -356,6 +370,11 @@ export const database = {
       },
       (error) => {
         console.warn(`[Firestore subscribeDoc error on ${col}/${docId}]:`, error.message);
+        if (onError) {
+          onError(error);
+        } else {
+          callback(null, false);
+        }
       }
     );
   },
@@ -367,7 +386,8 @@ export const database = {
    */
   subscribeCollection(
     col: string,
-    callback: (docs: Record<string, unknown>[]) => void
+    callback: (docs: Record<string, unknown>[]) => void,
+    onError?: (error: Error) => void
   ): () => void {
     const collectionRef = collection(firestore, col);
     return onSnapshot(
@@ -381,6 +401,8 @@ export const database = {
       },
       (error) => {
         console.warn(`[Firestore subscribeCollection error on ${col}]:`, error.message);
+        if (onError) onError(error);
+        else callback([]);
       }
     );
   },
@@ -393,7 +415,8 @@ export const database = {
     col: string,
     field: string,
     value: unknown,
-    callback: (docs: Record<string, unknown>[]) => void
+    callback: (docs: Record<string, unknown>[]) => void,
+    onError?: (error: Error) => void
   ): () => void {
     const collectionRef = collection(firestore, col);
     const q = query(collectionRef, where(field, "==", value));
@@ -408,8 +431,22 @@ export const database = {
       },
       (error) => {
         console.warn(`[Firestore subscribeQuery error on ${col}.${field}==${value}]:`, error.message);
+        if (onError) onError(error);
+        else callback([]);
       }
     );
+  },
+
+  /**
+   * Alias for subscribeQuery.
+   */
+  subscribeQueryWhere(
+    col: string,
+    field: string,
+    value: unknown,
+    callback: (docs: Record<string, unknown>[]) => void
+  ): () => void {
+    return this.subscribeQuery(col, field, value, callback);
   },
 
   /**
@@ -595,6 +632,18 @@ export async function sendPasswordReset(email: string): Promise<void> {
 
   try {
     await sendPasswordResetEmail(auth, normalizedEmail);
+  } catch (error: unknown) {
+    throw normalizeFirebaseAuthError(error);
+  }
+}
+
+/**
+ * Update current user password using Firebase Authentication.
+ */
+export async function updateUserPassword(newPassword: string): Promise<void> {
+  if (!auth.currentUser) throw new Error('No authenticated user found.');
+  try {
+    await updatePassword(auth.currentUser, newPassword);
   } catch (error: unknown) {
     throw normalizeFirebaseAuthError(error);
   }
@@ -1634,25 +1683,85 @@ export async function logAuditEvent(
 }
 
 /**
+ * Helper to clean and parse scanned QR input strings, URLs, or JSON objects.
+ * Extracts raw tokens or IDs from digital pass web URLs (e.g. ?token=..., ?qrToken=..., ?id=...) or JSON strings.
+ */
+export function cleanScanToken(raw: string): string {
+  if (!raw) return '';
+  let clean = raw.trim();
+
+  // 1. URL Parsing
+  if (clean.includes('://') || clean.includes('?')) {
+    try {
+      const url = new URL(clean);
+      const token =
+        url.searchParams.get('qrToken') ||
+        url.searchParams.get('token') ||
+        url.searchParams.get('participantId') ||
+        url.searchParams.get('id') ||
+        url.searchParams.get('uid');
+      if (token && token.trim()) return token.trim();
+
+      const segments = url.pathname.split('/').filter(Boolean);
+      if (segments.length > 0) {
+        const last = segments[segments.length - 1];
+        if (last && last !== 'digital-pass' && last !== 'pass') {
+          return last.trim();
+        }
+      }
+    } catch {
+      // ignore URL parse errors
+    }
+  }
+
+  // 2. JSON Object Parsing
+  if (clean.startsWith('{') && clean.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(clean);
+      const token = parsed.qrToken || parsed.participantId || parsed.id || parsed.uid;
+      if (token && typeof token === 'string' && token.trim()) {
+        return token.trim();
+      }
+    } catch {
+      // ignore JSON parse errors
+    }
+  }
+
+  return clean;
+}
+
+/**
  * Atomically verifies a QR token/ID at the Gate Registration Desk and records Venue Check-In.
  */
 export async function runAtomicVenueCheckIn(
   scanInput: string,
   staffUid: string
 ): Promise<{ participant: Record<string, unknown>; isAlreadyCheckedIn: boolean }> {
-  const normalized = scanInput.trim();
+  const normalized = cleanScanToken(scanInput);
+  if (!normalized) {
+    throw new Error('Please enter or scan a valid QR token or Participant ID.');
+  }
 
-  // Search by qrToken first, then by participantId, then by doc UID
+  const upper = normalized.toUpperCase();
   let targetUid: string | null = null;
 
+  // Multi-level participant lookup (qrToken, participantId, docId) with case tolerance
   const qQr = query(collection(firestore, "participants"), where("qrToken", "==", normalized));
-  const snapQr = await getDocs(qQr);
+  let snapQr = await getDocs(qQr);
+  if (snapQr.empty && upper !== normalized) {
+    const qQrUpper = query(collection(firestore, "participants"), where("qrToken", "==", upper));
+    snapQr = await getDocs(qQrUpper);
+  }
 
   if (!snapQr.empty) {
     targetUid = snapQr.docs[0].id;
   } else {
     const qPart = query(collection(firestore, "participants"), where("participantId", "==", normalized));
-    const snapPart = await getDocs(qPart);
+    let snapPart = await getDocs(qPart);
+    if (snapPart.empty && upper !== normalized) {
+      const qPartUpper = query(collection(firestore, "participants"), where("participantId", "==", upper));
+      snapPart = await getDocs(qPartUpper);
+    }
     if (!snapPart.empty) {
       targetUid = snapPart.docs[0].id;
     } else {
@@ -1671,13 +1780,36 @@ export async function runAtomicVenueCheckIn(
   const participantRef = doc(firestore, "participants", targetUid);
 
   return await runTransaction(firestore, async (transaction) => {
+    // Role verification for staffUid (Must be Registration Team Staff / Admin)
+    if (staffUid && staffUid !== 'staff-terminal') {
+      const staffDoc = await transaction.get(doc(firestore, "participants", staffUid));
+      if (staffDoc.exists()) {
+        const role = (staffDoc.data()?.role as string) || '';
+        const isStaffAuthorized =
+          role === 'staff' ||
+          role === 'STAFF' ||
+          role === 'registration_staff' ||
+          role === 'REGISTRATION_STAFF' ||
+          role === 'REGISTRATION_TEAM' ||
+          role === 'registration_team' ||
+          role === 'admin' ||
+          role === 'ADMIN' ||
+          role === 'super_admin' ||
+          role === 'PRESIDENT' ||
+          role === 'president';
+        if (!isStaffAuthorized) {
+          throw new Error("ACCESS_DENIED: Gate Entry Scanner is restricted to Registration Team staff. Coordinators cannot perform gate check-in.");
+        }
+      }
+    }
+
     const partSnap = await transaction.get(participantRef);
     if (!partSnap.exists()) {
       throw new Error(`NOT_FOUND: Participant document not found.`);
     }
 
     const partData = partSnap.data() as Record<string, unknown>;
-    const isAlready = partData.venueCheckIn === true;
+    const isAlready = partData.venueCheckIn === true || partData.venueCheckInStatus === 'CHECKED_IN';
     const now = new Date().toISOString();
 
     if (!isAlready) {
@@ -1717,8 +1849,10 @@ export async function runAtomicVenueCheckIn(
 }
 
 /**
- * Atomically checks in a participant for a specific event hall desk.
- * Strictly enforces that venueCheckIn == true before allowing event check-in.
+ * Atomically checks in a participant for a specific event round (Round 1 or Round 2).
+ * Strictly enforces stage-based progression:
+ * - Round 1 requires completed Venue Gate Check-In.
+ * - Round 2 requires completed Venue Gate Check-In AND Round 1 Scan AND Round 1 result SELECTED.
  * Idempotent: Returns isAlreadyCheckedIn if already recorded.
  */
 export async function runAtomicEventCheckIn(
@@ -1728,17 +1862,38 @@ export async function runAtomicEventCheckIn(
   coordinatorUid: string,
   round: EventAttendanceRound = 'ROUND_1'
 ): Promise<{ checkIn: EventCheckIn; participant: Record<string, unknown>; isAlreadyCheckedIn: boolean }> {
-  const normalized = participantInput.trim();
+  const normalized = cleanScanToken(participantInput);
+  if (!normalized) {
+    throw new Error('Please scan or enter a valid participant QR pass or ID.');
+  }
 
+  const upper = normalized.toUpperCase();
+
+  // Alias Event ID resolution (Paper-X-Verse Internal / External mapping)
+  const eventIdsToQuery = [eventId];
+  if (eventId === 'taras-01-int') eventIdsToQuery.push('paper-x-verse-internal');
+  if (eventId === 'paper-x-verse-internal') eventIdsToQuery.push('taras-01-int');
+  if (eventId === 'taras-01-ext') eventIdsToQuery.push('paper-x-verse-external');
+  if (eventId === 'paper-x-verse-external') eventIdsToQuery.push('taras-01-ext');
+
+  // 1. Multi-strategy Target Participant or Team Leader UID Resolution
   let targetUid: string | null = null;
   const qQr = query(collection(firestore, "participants"), where("qrToken", "==", normalized));
-  const snapQr = await getDocs(qQr);
+  let snapQr = await getDocs(qQr);
+  if (snapQr.empty && upper !== normalized) {
+    const qQrUpper = query(collection(firestore, "participants"), where("qrToken", "==", upper));
+    snapQr = await getDocs(qQrUpper);
+  }
 
   if (!snapQr.empty) {
     targetUid = snapQr.docs[0].id;
   } else {
     const qPart = query(collection(firestore, "participants"), where("participantId", "==", normalized));
-    const snapPart = await getDocs(qPart);
+    let snapPart = await getDocs(qPart);
+    if (snapPart.empty && upper !== normalized) {
+      const qPartUpper = query(collection(firestore, "participants"), where("participantId", "==", upper));
+      snapPart = await getDocs(qPartUpper);
+    }
     if (!snapPart.empty) {
       targetUid = snapPart.docs[0].id;
     } else {
@@ -1746,44 +1901,168 @@ export async function runAtomicEventCheckIn(
       const docSnap = await firestoreGetDoc(docRef);
       if (docSnap.exists()) {
         targetUid = normalized;
+      } else {
+        // Check if input is a teamCode or teamId
+        const qTeamCode = query(collection(firestore, "teams"), where("teamCode", "==", normalized));
+        let snapTeamCode = await getDocs(qTeamCode);
+        if (snapTeamCode.empty && upper !== normalized) {
+          const qTeamCodeUpper = query(collection(firestore, "teams"), where("teamCode", "==", upper));
+          snapTeamCode = await getDocs(qTeamCodeUpper);
+        }
+        if (!snapTeamCode.empty) {
+          targetUid = snapTeamCode.docs[0].data().leaderUid || null;
+        } else {
+          const teamDocSnap = await firestoreGetDoc(doc(firestore, "teams", normalized));
+          if (teamDocSnap.exists()) {
+            targetUid = teamDocSnap.data().leaderUid || null;
+          } else {
+            // Registration doc lookup fallback by participantId
+            const qRegPart = query(collection(firestore, "registrations"), where("participantId", "==", upper));
+            const snapRegPart = await getDocs(qRegPart);
+            if (!snapRegPart.empty) {
+              targetUid = (snapRegPart.docs[0].data().uid as string) || null;
+            }
+          }
+        }
       }
     }
   }
 
   if (!targetUid) {
-    throw new Error(`Participant with token/ID "${normalized}" not found.`);
+    throw new Error(`Participant with token/ID "${normalized}" not found in TARAS registry.`);
   }
 
-  const checkInId = `EVCHK-${eventId}-${targetUid}`;
+  // 2. Query actual registration document for this event/aliases and participant/team BEFORE transaction
+  const regsRef = collection(firestore, "registrations");
+  let actualRegRef: any = null;
+  let regDataOutside: Record<string, unknown> | null = null;
+
+  for (const evId of eventIdsToQuery) {
+    const qUserReg = query(regsRef, where("eventId", "==", evId), where("uid", "==", targetUid));
+    const snapUserReg = await getDocs(qUserReg);
+    if (!snapUserReg.empty) {
+      actualRegRef = snapUserReg.docs[0].ref;
+      regDataOutside = snapUserReg.docs[0].data() as Record<string, unknown>;
+      break;
+    }
+  }
+
+  let targetTeamId: string | null = null;
+  const partDocSnap = await firestoreGetDoc(doc(firestore, "participants", targetUid));
+  const partDataOutside = partDocSnap.exists() ? partDocSnap.data() : null;
+  if (partDataOutside) {
+    targetTeamId = partDataOutside.teamId || partDataOutside.teamIds?.[0] || null;
+  }
+
+  if (!actualRegRef && targetTeamId) {
+    for (const evId of eventIdsToQuery) {
+      const qTeamReg = query(regsRef, where("eventId", "==", evId), where("teamId", "==", targetTeamId));
+      const snapTeamReg = await getDocs(qTeamReg);
+      if (!snapTeamReg.empty) {
+        actualRegRef = snapTeamReg.docs[0].ref;
+        regDataOutside = snapTeamReg.docs[0].data() as Record<string, unknown>;
+        break;
+      }
+    }
+  }
+
+  const roundTag = round === 'ROUND_2' ? 'R2' : 'R1';
+  const checkInId = `EVCHK-${eventId}-${roundTag}-${targetUid}`;
   const checkInRef = doc(firestore, "event_checkins", checkInId);
   const participantRef = doc(firestore, "participants", targetUid);
-  const regId = `REG-${eventId}-${targetUid}`;
-  const regRef = doc(firestore, "registrations", regId);
 
   return await runTransaction(firestore, async (transaction) => {
+    // 1. Verify coordinator assignment & authorization with alias matching
+    const coordRef = doc(firestore, "participants", coordinatorUid);
+    const coordSnap = await transaction.get(coordRef);
+    if (coordSnap.exists()) {
+      const cData = coordSnap.data() as Record<string, unknown>;
+      const cRole = (cData.role as string) || '';
+      const assigned = (cData.assignedEventIds as string[]) || [];
+      const isMaster = cRole === 'super_admin' || cRole === 'PRESIDENT' || cRole === 'admin';
+      const isAssigned = assigned.some((id) => eventIdsToQuery.includes(id));
+      if (!isMaster && !isAssigned) {
+        throw new Error(`ACCESS_DENIED: You are not authorized for event track "${eventName}".`);
+      }
+    }
+
     const partSnap = await transaction.get(participantRef);
     if (!partSnap.exists()) {
-      throw new Error("Participant document not found.");
+      throw new Error("Participant document not found in TARAS database.");
     }
 
     const partData = partSnap.data() as Record<string, unknown>;
 
-    // Requirement 6 Check: Must have completed Venue Gate Check-In first!
-    if (partData.venueCheckIn !== true && partData.venueCheckInStatus !== 'CHECKED_IN') {
+    // 2. Requirement 10: Must have completed Venue Gate Check-In first!
+    const isGateCheckedIn = partData.venueCheckIn === true || partData.venueCheckInStatus === 'CHECKED_IN';
+    if (!isGateCheckedIn) {
       throw new Error(
-        `Gate Check-in Prerequisite Failed: ${partData.fullName || 'Participant'} has not completed Ground Floor Venue Gate Check-In.`
+        "Participant has not completed gate entry. Please send them to the Registration Team gate first."
       );
     }
 
-    // Verify registration for event
+    // 3. Requirement 18: Verify participant registration for event
+    let regData: Record<string, unknown> | null = regDataOutside;
+    if (actualRegRef) {
+      const regSnap = await transaction.get(actualRegRef);
+      if (regSnap.exists()) {
+        regData = regSnap.data() as Record<string, unknown>;
+      }
+    }
+
     const registeredEvents = (partData.registeredEvents as string[]) || [];
-    if (!registeredEvents.includes(eventId)) {
-      throw new Error(
-        `${partData.fullName || 'Participant'} is not registered for ${eventName}.`
-      );
+    const isRegisteredForEvent =
+      registeredEvents.some((ev) => eventIdsToQuery.includes(ev)) ||
+      registeredEvents.includes(eventName) ||
+      registeredEvents.some((ev) => ev.toLowerCase() === eventName.toLowerCase()) ||
+      (regData && regData.status !== 'CANCELLED' && regData.status !== 'REJECTED');
+
+    if (!isRegisteredForEvent) {
+      throw new Error(`Participant is not registered for ${eventName}.`);
     }
 
-    // Check duplicate event check-in (Idempotency)
+    // 4. Requirement 13: Round 2 Prerequisite Verification
+    if (round === 'ROUND_2') {
+      let isR1Scanned = false;
+      for (const evId of eventIdsToQuery) {
+        const r1CheckInId = `EVCHK-${evId}-R1-${targetUid}`;
+        const r1CheckInSnap = await transaction.get(doc(firestore, "event_checkins", r1CheckInId));
+        const attMap = (partData.attendanceStatus as Record<string, string>) || {};
+        if (
+          r1CheckInSnap.exists() ||
+          (regData && regData.round1Scanned === true) ||
+          attMap[`${evId}_ROUND_1`] === 'PRESENT' ||
+          attMap[`${eventId}_ROUND_1`] === 'PRESENT'
+        ) {
+          isR1Scanned = true;
+          break;
+        }
+      }
+
+      if (!isR1Scanned) {
+        throw new Error("Round 1 participation has not been recorded for this participant.");
+      }
+
+      const teamId = (regData?.teamId as string) || (partData.teamId as string) || (partData.teamIds as string[])?.[0] || targetUid;
+      let r1Outcome: string | null = (regData?.round1Result as string) || null;
+
+      if (!r1Outcome && teamId) {
+        for (const evId of eventIdsToQuery) {
+          const r1ResultRef = doc(firestore, "round1_results", `R1-${evId}-${teamId}`);
+          const r1ResSnap = await transaction.get(r1ResultRef);
+          if (r1ResSnap.exists()) {
+            r1Outcome = (r1ResSnap.data() as any).round1Result;
+            break;
+          }
+        }
+      }
+
+      if (r1Outcome !== 'SELECTED') {
+        throw new Error("Not eligible for Round 2. Participant Round 1 result must be marked as SELECTED.");
+      }
+    }
+
+    // 5. Check duplicate event check-in (Idempotency)
     const existingCheckInSnap = await transaction.get(checkInRef);
     const isAlready = existingCheckInSnap.exists();
 
@@ -1796,7 +2075,7 @@ export async function runAtomicEventCheckIn(
       eventName,
       participantId: (partData.participantId as string) || "",
       uid: targetUid,
-      isTeam: false,
+      isTeam: !!regData?.isTeamEvent,
       round,
       status: "CHECKED_IN",
       checkedInAt: now,
@@ -1804,11 +2083,11 @@ export async function runAtomicEventCheckIn(
     };
 
     if (!isAlready) {
-      // Update participant attendance status for event
       const attendanceStatusMap = (partData.attendanceStatus as Record<string, string>) || {};
       const updatedAttendanceMap = {
         ...attendanceStatusMap,
         [eventId]: "PRESENT",
+        [`${eventId}_${round}`]: "PRESENT",
       };
 
       transaction.set(checkInRef, {
@@ -1822,20 +2101,30 @@ export async function runAtomicEventCheckIn(
         updatedAt: serverTimestamp(),
       });
 
-      // Update registration record if exists
-      const regSnap = await transaction.get(regRef);
-      if (regSnap.exists()) {
-        transaction.update(regRef, {
+      if (actualRegRef) {
+        const regUpdates: Record<string, any> = {
           eventAttendance: 'PRESENT',
           status: 'CHECKED_IN',
           updatedAt: serverTimestamp(),
-        });
+        };
+
+        if (round === 'ROUND_1') {
+          regUpdates.round1Scanned = true;
+          regUpdates.round1ScannedAt = now;
+          regUpdates.round1ScannedBy = coordinatorUid;
+        } else if (round === 'ROUND_2') {
+          regUpdates.round2Scanned = true;
+          regUpdates.round2ScannedAt = now;
+          regUpdates.round2ScannedBy = coordinatorUid;
+        }
+
+        transaction.update(actualRegRef, regUpdates);
       }
 
-      // Write audit log
+      const auditAction = round === 'ROUND_2' ? 'ROUND_2_SCAN' : 'ROUND_1_SCAN';
       const auditRef = doc(collection(firestore, "audit_logs"));
       transaction.set(auditRef, {
-        action: "EVENT_CHECK_IN",
+        action: auditAction,
         actorUid: coordinatorUid,
         actorRole: "coordinator",
         targetUid,
@@ -1856,6 +2145,7 @@ export async function runAtomicEventCheckIn(
         attendanceStatus: {
           ...((partData.attendanceStatus as Record<string, string>) || {}),
           [eventId]: "PRESENT",
+          [`${eventId}_${round}`]: "PRESENT",
         },
       },
       isAlreadyCheckedIn: isAlready,

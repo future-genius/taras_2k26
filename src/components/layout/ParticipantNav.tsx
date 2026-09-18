@@ -11,14 +11,14 @@ export const ParticipantMobileBottomNav: React.FC = () => {
 
   const getHomeDashboard = () => {
     if (isSuperAdmin || isAdmin) return '/admin/dashboard';
+    if (isCoordinator) return '/coordinator/dashboard';
     if (role === 'registration_staff') return '/registration';
     if (isStaff) return '/staff/dashboard';
-    if (isCoordinator) return '/coordinator/dashboard';
     return '/participant/dashboard';
   };
 
   const navItems = [
-    { label: isSuperAdmin ? 'President' : isAdmin ? 'Admin' : role === 'registration_staff' ? 'Scan' : isStaff ? 'Desk' : isCoordinator ? 'Head' : 'Home', path: getHomeDashboard(), icon: <Home className="w-5 h-5" /> },
+    { label: isSuperAdmin ? 'President' : isAdmin ? 'Admin' : isCoordinator ? 'Head' : role === 'registration_staff' ? 'Scan' : isStaff ? 'Desk' : 'Home', path: getHomeDashboard(), icon: <Home className="w-5 h-5" /> },
     { label: 'Events', path: '/participant/my-events', icon: <Calendar className="w-5 h-5" /> },
     { label: 'QR Pass', path: '/participant/pass', icon: <QrCode className="w-6 h-6 text-[#b91c1c]" />, highlight: true },
     { label: 'Updates', path: '/announcements', icon: <Radio className="w-5 h-5" /> },
@@ -69,17 +69,17 @@ export const HeaderUserMenu: React.FC = () => {
 
   const getDashboardPath = () => {
     if (isSuperAdmin || isAdmin) return '/admin/dashboard';
+    if (isCoordinator) return '/coordinator/dashboard';
     if (role === 'registration_staff') return '/registration';
     if (isStaff) return '/staff/dashboard';
-    if (isCoordinator) return '/coordinator/dashboard';
     return '/participant/dashboard';
   };
 
   const getRoleBadge = () => {
     if (isSuperAdmin) return 'PRESIDENT';
     if (isAdmin) return 'ADMIN';
-    if (role === 'registration_staff') return 'REG DESK';
     if (isCoordinator) return 'EVENT HEAD';
+    if (role === 'registration_staff') return 'REG DESK';
     if (isStaff) return 'STAFF';
     return null;
   };

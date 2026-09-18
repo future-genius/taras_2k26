@@ -60,7 +60,7 @@ export const SecurityPage: React.FC = () => {
             2. Payment Proof Isolation
           </h3>
           <p className="text-slate-300">
-            Payment screenshots uploaded by participants are stored in private Supabase Storage buckets with strict signed-URL duration limits. Payment images are never exposed to public search engines or unauthorized participants.
+            Payment screenshots uploaded by participants are stored in secured Google Drive cloud storage with authenticated Google Apps Script verification. Payment images are never exposed to public search engines or unauthorized participants.
           </p>
         </section>
 

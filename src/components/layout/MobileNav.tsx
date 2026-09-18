@@ -28,6 +28,13 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import {
+  normalizeRole,
+  isAdminOrAbove,
+  isCoordinatorOrAbove,
+  isStaffOrAbove,
+  getRoleDisplayName,
+} from '../../utils/roleHelpers';
 
 interface MobileNavProps {
   isOpen: boolean;
@@ -63,17 +70,29 @@ export const MobileNav: React.FC<MobileNavProps> = ({
     }
   }, [isOpen, onClose]);
 
-  const userRole = (role || participantProfile?.role || '').toLowerCase();
-  const isAdminOrStaff = [
-    'admin',
-    'super_admin',
-    'president',
-    'staff',
-    'registration_staff',
-    'registration_team',
-    'coordinator',
-    'event_head',
-  ].includes(userRole);
+  const userRole = normalizeRole(role || participantProfile?.role);
+  const isSuperAdmin = userRole === 'super_admin';
+  const isAdmin = isAdminOrAbove(userRole);
+  const isCoordinator = userRole === 'coordinator';
+  const isStaffMember = userRole === 'staff' || userRole === 'registration_staff';
+  const hasStaffOrAdminClearance = isAdmin || isCoordinator || isStaffMember;
+
+  const getPrimaryDashboardPath = () => {
+    if (isAdmin) return '/admin/dashboard';
+    if (isCoordinator) return '/coordinator/dashboard';
+    if (userRole === 'registration_staff') return '/registration';
+    if (userRole === 'staff') return '/staff/dashboard';
+    return '/participant/dashboard';
+  };
+
+  const getPrimaryDashboardLabel = () => {
+    if (isSuperAdmin) return 'President Command';
+    if (isAdmin) return 'Admin Command Center';
+    if (isCoordinator) return 'Event Head Console';
+    if (userRole === 'registration_staff') return 'Registration Desk';
+    if (userRole === 'staff') return 'Staff Operational Desk';
+    return 'Dashboard Terminal';
+  };
 
   const containerVariants: Variants = {
     hidden: { opacity: 0 },
@@ -111,7 +130,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({
 
   // Logged-in Participant Items
   const participantNavItems = [
-    { name: 'Dashboard Terminal', path: '/participant/dashboard', icon: <LayoutDashboard className="w-4 h-4 text-[#dc2626]" /> },
+    { name: getPrimaryDashboardLabel(), path: getPrimaryDashboardPath(), icon: <LayoutDashboard className="w-4 h-4 text-[#dc2626]" /> },
     { name: 'My Registered Events', path: '/participant/my-events', icon: <Calendar className="w-4 h-4 text-[#dc2626]" /> },
     { name: 'My Squads & Teams', path: '/participant/dashboard#my-squads-section', icon: <Users className="w-4 h-4 text-[#dc2626]" /> },
     { name: 'Digital Pass QR', path: '/participant/pass', icon: <QrCode className="w-4 h-4 text-[#dc2626]" /> },
@@ -121,12 +140,20 @@ export const MobileNav: React.FC<MobileNavProps> = ({
     { name: 'Account Profile', path: '/participant/profile', icon: <User className="w-4 h-4 text-[#dc2626]" /> },
   ];
 
-  // Admin / Staff / Coordinator Nav Items
+  // Admin / Staff / Coordinator Nav Items (strictly filtered by verified clearance level)
   const staffNavItems = [
-    { name: 'Staff Operational Desk', path: '/staff/dashboard', icon: <ShieldCheck className="w-4 h-4 text-emerald-400" /> },
-    { name: 'Registration Desk Terminal', path: '/registration', icon: <CheckCircle2 className="w-4 h-4 text-emerald-400" /> },
-    { name: 'Coordinator Terminal', path: '/coordinator/dashboard', icon: <Compass className="w-4 h-4 text-amber-400" /> },
-    { name: 'Executive Admin Dashboard', path: '/admin/dashboard', icon: <Shield className="w-4 h-4 text-red-500" /> },
+    ...(isAdmin
+      ? [{ name: 'Executive Admin Dashboard', path: '/admin/dashboard', icon: <Shield className="w-4 h-4 text-red-500" /> }]
+      : []),
+    ...(isCoordinator || isAdmin
+      ? [{ name: 'Coordinator Terminal', path: '/coordinator/dashboard', icon: <Compass className="w-4 h-4 text-amber-400" /> }]
+      : []),
+    ...(isStaffMember || isAdmin
+      ? [
+          { name: 'Staff Operational Desk', path: '/staff/dashboard', icon: <ShieldCheck className="w-4 h-4 text-emerald-400" /> },
+          { name: 'Registration Desk Terminal', path: '/registration', icon: <CheckCircle2 className="w-4 h-4 text-emerald-400" /> },
+        ]
+      : []),
   ];
 
   return (
@@ -192,7 +219,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({
                     {participantProfile?.fullName || user?.email}
                   </span>
                   <span className="text-[9px] text-slate-400 block truncate">
-                    ID: <strong className="text-[#dc2626]">{participantProfile?.participantId || 'STAFF'}</strong> • {userRole.toUpperCase()}
+                    ID: <strong className="text-[#dc2626]">{participantProfile?.participantId || 'STAFF'}</strong> • {getRoleDisplayName(userRole)}
                   </span>
                 </div>
               </div>
@@ -251,11 +278,11 @@ export const MobileNav: React.FC<MobileNavProps> = ({
               </div>
             )}
 
-            {/* 2. Admin / Staff Terminals (If user has operational role) */}
-            {isAdminOrStaff && (
+            {/* 2. Admin / Staff Terminals (Strictly filtered by clearance) */}
+            {hasStaffOrAdminClearance && staffNavItems.length > 0 && (
               <div className="space-y-1 pt-2 border-t border-[#dc2626]/20">
                 <span className="text-[10px] text-amber-400 font-bold uppercase tracking-widest px-3 block pb-1.5">
-                  STAFF & ADMIN TERMINALS
+                  OPERATIONAL TERMINALS
                 </span>
                 {staffNavItems.map((item) => (
                   <motion.div key={item.path} variants={itemVariants}>

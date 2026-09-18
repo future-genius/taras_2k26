@@ -29,6 +29,9 @@ import {
   Megaphone,
   Medal,
   Award,
+  Maximize2,
+  Eye,
+  X,
 } from 'lucide-react';
 
 interface EventDetailViewProps {
@@ -39,6 +42,7 @@ interface EventDetailViewProps {
 export const EventDetailView: React.FC<EventDetailViewProps> = ({ event }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'rounds' | 'rules' | 'coordinators' | 'announcements' | 'results'>('overview');
   const [isWizardOpen, setIsWizardOpen] = useState(false);
+  const [isImageFullscreen, setIsImageFullscreen] = useState(false);
   const [userTeams, setUserTeams] = useState<EventTeam[]>([]);
   const [eventAnnouncements, setEventAnnouncements] = useState<any[]>([]);
   const [eventResult, setEventResult] = useState<any | null>(null);
@@ -148,6 +152,60 @@ export const EventDetailView: React.FC<EventDetailViewProps> = ({ event }) => {
           Events Hub / {event.slug}
         </span>
       </div>
+
+      {/* ── Top Event Image View Banner (Full Uncropped View) ── */}
+      {(event.bannerImage || event.image) && (
+        <div className="relative group rounded-3xl overflow-hidden border-2 border-[#b91c1c]/60 shadow-[0_0_35px_rgba(185,28,28,0.3)] bg-[#050608] flex items-center justify-center p-3 sm:p-6">
+          <div
+            onClick={() => setIsImageFullscreen(true)}
+            className="w-full min-h-[300px] max-h-[550px] relative flex items-center justify-center overflow-hidden cursor-pointer"
+          >
+            <img
+              src={event.bannerImage || event.image}
+              alt={event.name}
+              className="w-full h-full object-contain object-center max-h-[520px] rounded-2xl transition-transform duration-500 ease-out group-hover:scale-102"
+            />
+
+            {/* Top Badge Overlay */}
+            <div className="absolute top-2 left-2 sm:top-4 sm:left-4 z-10 flex items-center gap-2">
+              <span className="px-3.5 py-1.5 rounded-full text-xs font-mono font-bold uppercase tracking-wider bg-[#1a0000]/95 text-white border border-[#b91c1c]/80 backdrop-blur-md shadow-xl flex items-center gap-2">
+                <Eye className="w-3.5 h-3.5 text-[#b91c1c]" /> OFFICIAL EVENT IMAGE // {event.name}
+              </span>
+            </div>
+
+            {/* Hover Expand Prompt */}
+            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center pointer-events-none z-10 rounded-2xl">
+              <span className="px-5 py-2.5 rounded-xl bg-[#1a0000]/95 text-white border border-[#b91c1c] text-xs font-mono font-bold uppercase tracking-wider shadow-2xl flex items-center gap-2 transform translate-y-2 group-hover:translate-y-0 transition-transform">
+                <Maximize2 className="w-4 h-4 text-[#b91c1c]" /> Click to View Full Resolution Image
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Fullscreen Image Lightbox Modal */}
+      {isImageFullscreen && (event.bannerImage || event.image) && (
+        <div
+          className="fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex items-center justify-center p-4 sm:p-8 animate-fadeIn"
+          onClick={() => setIsImageFullscreen(false)}
+        >
+          <button
+            onClick={() => setIsImageFullscreen(false)}
+            className="absolute top-6 right-6 p-3 rounded-full bg-[#1a0000] text-white border border-[#b91c1c] hover:bg-red-600 transition-colors z-50 shadow-2xl"
+            title="Close Full Image View"
+          >
+            <X className="w-6 h-6" />
+          </button>
+          <div className="relative max-w-5xl max-h-[90vh] overflow-hidden rounded-2xl border border-[#b91c1c]/50 shadow-2xl">
+            <img
+              src={event.bannerImage || event.image}
+              alt={event.name}
+              className="w-full h-full object-contain max-h-[85vh] rounded-2xl"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+        </div>
+      )}
 
       {/* ── Hero Header Card ── */}
       <div className="glass-panel-glow rounded-3xl p-6 sm:p-10 relative overflow-hidden space-y-6 border border-[#b91c1c]/40">

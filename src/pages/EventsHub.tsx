@@ -98,17 +98,11 @@ export const EventsHub: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-3 shrink-0">
-              <button
-                onClick={openRegistration}
-                className="px-5 py-2.5 rounded-xl bg-[#dc2626] hover:bg-[#b91c1c] text-white text-xs font-mono font-bold uppercase tracking-wider transition-all shadow-lg shadow-red-950/50 flex items-center gap-2"
-              >
-                <Zap className="w-4 h-4 text-white" /> Register Pass
-              </button>
               <Link
                 to="/timeline"
-                className="px-5 py-2.5 rounded-xl bg-[#0a0c10] border border-slate-700 hover:border-white text-slate-300 hover:text-white text-xs font-mono font-bold uppercase tracking-wider transition-colors"
+                className="px-5 py-2.5 rounded-xl bg-[#dc2626] hover:bg-[#b91c1c] text-white text-xs font-mono font-bold uppercase tracking-wider transition-colors shadow-lg flex items-center gap-2"
               >
-                Schedule
+                View Symposium Schedule →
               </Link>
             </div>
           </div>

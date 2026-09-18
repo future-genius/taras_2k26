@@ -255,7 +255,9 @@ export const ParticipantsPage: React.FC = () => {
                 <option value="participant">Participant</option>
                 <option value="coordinator">Coordinator</option>
                 <option value="staff">Staff</option>
+                <option value="registration_staff">Registration Staff</option>
                 <option value="admin">Admin</option>
+                <option value="super_admin">Super Admin / President</option>
               </select>
             </div>
 

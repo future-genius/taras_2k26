@@ -21,9 +21,15 @@ export interface EventTeam {
   // but NEW teams will NOT have these fields set.
   eventId?: string;
   eventName?: string;
+  registeredEvents?: any[];
+  registeredEventName?: string;
 
   leaderUid: string;
   leaderParticipantId: string;
+  leaderName?: string;
+  captainId?: string; // Backward compatibility alias for leaderUid
+  captainParticipantId?: string; // Backward compatibility alias for leaderParticipantId
+  squadId?: string; // Backward compatibility alias for teamId
   memberUids: string[];
   members: RegistrationTeamMember[];
 
@@ -48,6 +54,21 @@ export interface EventTeam {
   /** ISO timestamp of when team composition was locked */
   lockedAt?: string;
 
+  /**
+   * Authoritative paid member count set upon payment verification/confirmation.
+   * Lock rule: currentMemberCount <= paidMemberCount
+   */
+  paidMemberCount?: number;
+
+  /**
+   * True once payment for the team registration is verified by staff/president.
+   * Locks team member count permanently.
+   */
+  isPaymentVerified?: boolean;
+
+  /** ISO timestamp when payment was verified */
+  paymentVerifiedAt?: string;
+
   createdAt: string;
   updatedAt: string;
 }
@@ -62,7 +83,9 @@ export interface TeamJoinRequest {
   eventName?: string;
 
   leaderUid: string;
+  captainId?: string; // Backward compatibility alias for leaderUid
   participantUid: string;
+  userId?: string; // Backward compatibility alias for participantUid
   participantId: string;
   fullName: string;
   email?: string;

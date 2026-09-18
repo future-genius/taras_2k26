@@ -8,10 +8,10 @@ import { Clock, MapPin, Users, Award, ChevronRight } from 'lucide-react';
 
 interface EventCardProps {
   event: TARASEvent;
-  onRegisterClick: () => void;
+  onRegisterClick?: () => void;
 }
 
-export const EventCard: React.FC<EventCardProps> = ({ event, onRegisterClick }) => {
+export const EventCard: React.FC<EventCardProps> = ({ event }) => {
   const categoryKey = event.category === 'TECHNICAL' ? 'technical' : 'non-technical';
 
   return (
@@ -20,6 +20,7 @@ export const EventCard: React.FC<EventCardProps> = ({ event, onRegisterClick }) 
       subtitle={event.shortDescription}
       category={categoryKey}
       badge={event.category.replace('_', ' ')}
+      imageUrl={event.bannerImage || event.image}
     >
       <div className="space-y-3">
         {/* Theme & Tagline */}
@@ -47,16 +48,13 @@ export const EventCard: React.FC<EventCardProps> = ({ event, onRegisterClick }) 
           )}
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex items-center gap-2 pt-2 border-t border-white/10">
-          <Link to={`/events/${event.slug}`} className="flex-1">
-            <Button variant="outline" size="sm" className="w-full justify-center" icon={<ChevronRight className="w-3.5 h-3.5" />}>
+        {/* Action Button */}
+        <div className="pt-2 border-t border-white/10">
+          <Link to={`/events/${event.slug}`} className="w-full block">
+            <Button variant="glow" size="sm" className="w-full justify-center font-bold" icon={<ChevronRight className="w-3.5 h-3.5" />}>
               Details
             </Button>
           </Link>
-          <Button variant="glow" size="sm" onClick={onRegisterClick}>
-            Register Pass
-          </Button>
         </div>
       </div>
     </VisualCard>

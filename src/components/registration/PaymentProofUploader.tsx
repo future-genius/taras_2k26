@@ -2,12 +2,12 @@
  * TARAS 2K26 — Payment Proof Uploader Component
  *
  * Responsibilities:
- * 1. File selection (drag & drop / click) with 5 MB input limit validation
+ * 1. File selection (drag & drop / click) with 3 MB input limit validation
  * 2. Instant client-side compression & resizing (Canvas API, max 1600px, WebP/JPEG)
  * 3. Transparent size comparison display (Original vs Optimized & % reduction)
  * 4. Crisp readable preview so participant can verify UTR, date, and amount
  * 5. Smooth upload progress tracking (0% -> 100%)
- * 6. Duplicate upload prevention & network failure retry
+ * 6. Duplicate upload prevention & network failure retry (same requestId)
  * 7. Mobile memory leak prevention via blob URL revocation
  */
 
@@ -22,6 +22,7 @@ import {
   FileCheck2,
   Sparkles,
   ShieldCheck,
+  ExternalLink,
 } from 'lucide-react';
 import {
   compressPaymentScreenshot,
@@ -30,16 +31,16 @@ import {
   MAX_INPUT_FILE_SIZE_BYTES,
 } from '../../utils/imageCompression';
 import {
-  uploadPaymentProofToSupabase,
+  uploadPaymentProofToGoogleDrive,
   generateAuthoritativeTimestamp,
-  type DualStoragePaymentProofMetadata,
+  type DrivePaymentProofMetadata,
 } from '../../services/paymentProofStorageService';
 
 export type UploadState = 'idle' | 'compressing' | 'ready' | 'uploading' | 'success' | 'error';
 
 export interface PaymentProofUploaderRef {
-  /** Upload the currently optimized image to Supabase Storage & Google Drive Archive */
-  upload: () => Promise<DualStoragePaymentProofMetadata>;
+  /** Upload the currently optimized image to Google Drive via Apps Script */
+  upload: () => Promise<DrivePaymentProofMetadata>;
   /** Check if a valid screenshot has been optimized and is ready for upload */
   isReady: boolean;
   /** Check if an upload is currently in flight */
@@ -52,25 +53,39 @@ export interface PaymentProofUploaderRef {
 
 interface PaymentProofUploaderProps {
   registrationId: string;
+  eventName?: string;
   existingScreenshotUrl?: string;
   onStateChange?: (state: UploadState) => void;
   disabled?: boolean;
 }
 
 export const PaymentProofUploader = forwardRef<PaymentProofUploaderRef, PaymentProofUploaderProps>(
-  ({ registrationId, existingScreenshotUrl, onStateChange, disabled = false }, ref) => {
+  ({ registrationId, eventName, existingScreenshotUrl, onStateChange, disabled = false }, ref) => {
     const [state, setState] = useState<UploadState>(existingScreenshotUrl ? 'success' : 'idle');
     const [optimizedResult, setOptimizedResult] = useState<OptimizedImageResult | null>(null);
     const [uploadProgress, setUploadProgress] = useState<number>(0);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [previewModalOpen, setPreviewModalOpen] = useState(false);
     const [isDragOver, setIsDragOver] = useState(false);
+    const [uploadedDriveUrl, setUploadedDriveUrl] = useState<string | null>(
+      existingScreenshotUrl || null
+    );
 
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const currentUploadPromiseRef = useRef<Promise<DualStoragePaymentProofMetadata> | null>(null);
+    const currentUploadPromiseRef = useRef<Promise<DrivePaymentProofMetadata> | null>(null);
     const latestOptimizedRef = useRef<OptimizedImageResult | null>(null);
 
     latestOptimizedRef.current = optimizedResult;
+
+    // Sync existingScreenshotUrl when prop updates from database
+    useEffect(() => {
+      if (existingScreenshotUrl) {
+        setUploadedDriveUrl(existingScreenshotUrl);
+        if (!optimizedResult) {
+          setState('success');
+        }
+      }
+    }, [existingScreenshotUrl]);
 
     // Cleanup object URL on unmount to avoid memory leaks
     useEffect(() => {
@@ -90,9 +105,9 @@ export const PaymentProofUploader = forwardRef<PaymentProofUploaderRef, PaymentP
     const processSelectedFile = async (file: File) => {
       if (!file) return;
 
-      // 1. Input limit check: 1 MB (1,048,576 bytes)
+      // 1. Input limit check: 3 MB
       if (file.size > MAX_INPUT_FILE_SIZE_BYTES) {
-        setErrorMessage('Payment proof file must be 1 MB or smaller.');
+        setErrorMessage('Payment proof file must be 3 MB or smaller. Please choose a smaller image.');
         setState('error');
         return;
       }
@@ -158,28 +173,31 @@ export const PaymentProofUploader = forwardRef<PaymentProofUploaderRef, PaymentP
       setOptimizedResult(null);
       setErrorMessage(null);
       setUploadProgress(0);
+      setUploadedDriveUrl(null);
       setState('idle');
       setTimeout(() => fileInputRef.current?.click(), 50);
     };
 
     // Actual upload logic invoked when user clicks Submit or Retry
-    const executeUpload = async (): Promise<DualStoragePaymentProofMetadata> => {
-      // If already uploaded and no new image picked, return existing
-      if (state === 'success' && existingScreenshotUrl && !optimizedResult) {
+    const executeUpload = async (): Promise<DrivePaymentProofMetadata> => {
+      const activeUrl = uploadedDriveUrl || existingScreenshotUrl;
+      // If already uploaded (has Drive URL) and no new image picked, return existing proof metadata
+      if ((state === 'success' || !!activeUrl) && !optimizedResult) {
         const timeInfo = generateAuthoritativeTimestamp();
         return {
           paymentProofId: `EXISTING-${registrationId}`,
-          provider: 'supabase',
-          bucket: 'payment-proofs',
-          path: '',
+          provider: 'googledrive',
+          driveFileId: '',
+          driveFileUrl: activeUrl || '',
+          driveFileName: '',
+          driveFolderId: '',
+          drivePath: '',
+          driveUploadStatus: 'SUCCESS',
           fileSize: 0,
           contentType: 'image/webp',
           uploadedAt: timeInfo.isoIST,
           uploadedAtIST: timeInfo.formattedIST,
-          signedUrl: existingScreenshotUrl,
-          supabasePath: '',
-          supabaseUploadStatus: 'SUCCESS',
-          googleDriveUploadStatus: 'SUCCESS',
+          signedUrl: activeUrl || '',
         };
       }
 
@@ -196,9 +214,10 @@ export const PaymentProofUploader = forwardRef<PaymentProofUploaderRef, PaymentP
       setErrorMessage(null);
       setUploadProgress(10);
 
-      const uploadPromise = uploadPaymentProofToSupabase(
+      const uploadPromise = uploadPaymentProofToGoogleDrive(
         registrationId,
         optimizedResult.file,
+        eventName,
         (progress) => {
           setUploadProgress(progress);
         }
@@ -206,14 +225,15 @@ export const PaymentProofUploader = forwardRef<PaymentProofUploaderRef, PaymentP
         .then((res) => {
           setState('success');
           setUploadProgress(100);
+          setUploadedDriveUrl(res.driveFileUrl || null);
           return res;
         })
         .catch((err) => {
-          console.error('Upload execution failed:', err);
+          console.error('Drive upload failed:', err);
           setState('error');
           setErrorMessage(
             err.message ||
-              'Payment proof upload failed. Your registration is still saved. Please retry.'
+              'Payment proof upload failed. Please check your connection and retry.'
           );
           throw err;
         })
@@ -228,7 +248,11 @@ export const PaymentProofUploader = forwardRef<PaymentProofUploaderRef, PaymentP
     // Expose control handles via ref for parent form coordination
     useImperativeHandle(ref, () => ({
       upload: executeUpload,
-      isReady: state === 'ready' || (state === 'success' && !!existingScreenshotUrl),
+      isReady:
+        state === 'ready' ||
+        state === 'success' ||
+        !!uploadedDriveUrl ||
+        !!existingScreenshotUrl,
       isUploading: state === 'uploading',
       reset: () => {
         if (optimizedResult?.previewUrl) {
@@ -237,6 +261,7 @@ export const PaymentProofUploader = forwardRef<PaymentProofUploaderRef, PaymentP
         setOptimizedResult(null);
         setErrorMessage(null);
         setUploadProgress(0);
+        setUploadedDriveUrl(existingScreenshotUrl || null);
         setState(existingScreenshotUrl ? 'success' : 'idle');
       },
       getOptimizedImage: () => optimizedResult,
@@ -248,7 +273,7 @@ export const PaymentProofUploader = forwardRef<PaymentProofUploaderRef, PaymentP
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/jpeg,image/jpg,image/png,image/webp,application/pdf"
+          accept="image/jpeg,image/jpg,image/png,image/webp"
           onChange={handleFileChange}
           disabled={disabled || state === 'uploading'}
           className="hidden"
@@ -274,7 +299,7 @@ export const PaymentProofUploader = forwardRef<PaymentProofUploaderRef, PaymentP
 
             <div>
               <span className="font-bold text-white text-xs block">
-                Select Payment Proof File
+                Select Payment Proof Screenshot
               </span>
               <span className="text-[11px] text-slate-400 font-light block mt-0.5">
                 Drag &amp; drop or click to browse
@@ -283,10 +308,10 @@ export const PaymentProofUploader = forwardRef<PaymentProofUploaderRef, PaymentP
 
             <div className="flex items-center gap-2 pt-1 text-[10px] text-slate-400">
               <span className="px-2 py-0.5 rounded bg-white/5 border border-white/10">
-                Max 1 MB
+                Max 3 MB
               </span>
               <span>•</span>
-              <span className="text-slate-300">JPG, PNG, PDF</span>
+              <span className="text-slate-300">JPG, PNG, WebP</span>
               <span>•</span>
               <span className="text-[#dc2626] font-bold">Auto-Optimized</span>
             </div>
@@ -302,7 +327,7 @@ export const PaymentProofUploader = forwardRef<PaymentProofUploaderRef, PaymentP
                 Optimizing Payment Screenshot...
               </span>
               <span className="text-[10px] text-slate-400 font-light mt-0.5 block">
-                Resizing to 1600px &amp; converting to sharp WebP (preserving UTR &amp; transaction text)
+                Resizing to 1600px &amp; converting to WebP (preserving UTR &amp; transaction text)
               </span>
             </div>
           </div>
@@ -381,7 +406,7 @@ export const PaymentProofUploader = forwardRef<PaymentProofUploaderRef, PaymentP
                 <div className="flex items-center justify-between text-[10px]">
                   <span className="text-slate-300 font-bold flex items-center gap-1.5">
                     <RefreshCw className="w-3 h-3 text-[#dc2626] animate-spin" />
-                    Uploading payment proof...
+                    Uploading payment proof to Google Drive...
                   </span>
                   <span className="text-[#dc2626] font-bold">{uploadProgress}%</span>
                 </div>
@@ -398,27 +423,44 @@ export const PaymentProofUploader = forwardRef<PaymentProofUploaderRef, PaymentP
 
         {/* ── STATE: SUCCESS ── */}
         {state === 'success' && (
-          <div className="p-4 rounded-2xl bg-[#0a140f] border border-green-700/60 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5">
-              <CheckCircle2 className="w-5 h-5 text-green-400 shrink-0" />
-              <div>
-                <span className="text-xs font-bold text-white block">
-                  Payment Proof Uploaded Successfully
-                </span>
-                <span className="text-[10px] text-green-400/80 font-light">
-                  {optimizedResult ? `Stored optimized at ${optimizedResult.optimizedSizeFormatted}` : 'Securely stored in Firebase Storage'}
-                </span>
+          <div className="p-4 rounded-2xl bg-[#0a140f] border border-green-700/60 space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <CheckCircle2 className="w-5 h-5 text-green-400 shrink-0" />
+                <div>
+                  <span className="text-xs font-bold text-white block">
+                    Payment Proof Uploaded Successfully
+                  </span>
+                  <span className="text-[10px] text-green-400/80 font-light">
+                    {optimizedResult
+                      ? `Compressed to ${optimizedResult.optimizedSizeFormatted} — uploaded to Google Drive`
+                      : 'Securely uploaded to Google Drive'}
+                  </span>
+                </div>
               </div>
+
+              <button
+                type="button"
+                onClick={handleChangeScreenshot}
+                disabled={disabled}
+                className="px-3 py-1.5 rounded-lg bg-[#141822] hover:bg-[#1a202c] border border-slate-700 text-[10px] text-slate-300 hover:text-white transition-all shrink-0"
+              >
+                Replace Screenshot
+              </button>
             </div>
 
-            <button
-              type="button"
-              onClick={handleChangeScreenshot}
-              disabled={disabled}
-              className="px-3 py-1.5 rounded-lg bg-[#141822] hover:bg-[#1a202c] border border-slate-700 text-[10px] text-slate-300 hover:text-white transition-all shrink-0"
-            >
-              Replace Screenshot
-            </button>
+            {/* Drive link for participant confirmation */}
+            {uploadedDriveUrl && (
+              <a
+                href={uploadedDriveUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-[10px] text-slate-400 hover:text-green-400 transition-colors"
+              >
+                <ExternalLink className="w-3 h-3 shrink-0" />
+                View uploaded proof in Google Drive
+              </a>
+            )}
           </div>
         )}
 
@@ -428,7 +470,7 @@ export const PaymentProofUploader = forwardRef<PaymentProofUploaderRef, PaymentP
             <div className="flex items-start gap-2.5">
               <AlertCircle className="w-4 h-4 text-[#dc2626] shrink-0 mt-0.5" />
               <div className="space-y-0.5">
-                <span className="text-xs font-bold text-white block">Upload Notice</span>
+                <span className="text-xs font-bold text-white block">Upload Failed</span>
                 <p className="text-[11px] text-red-300 font-light leading-relaxed">
                   {errorMessage || 'Payment proof upload failed. Please try again.'}
                 </p>
@@ -457,7 +499,7 @@ export const PaymentProofUploader = forwardRef<PaymentProofUploaderRef, PaymentP
           </div>
         )}
 
-        {/* ── FULL PREVIEW MODAL (Verification of UTR/Date clarity) ── */}
+        {/* ── FULL PREVIEW MODAL ── */}
         {previewModalOpen && optimizedResult && (
           <div
             className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4"
@@ -493,7 +535,8 @@ export const PaymentProofUploader = forwardRef<PaymentProofUploaderRef, PaymentP
 
               <div className="flex items-center justify-between text-[10px] text-slate-400 px-1">
                 <span>
-                  Size: <strong className="text-green-400">{optimizedResult.optimizedSizeFormatted}</strong> ({optimizedResult.reductionPercent}% smaller)
+                  Size: <strong className="text-green-400">{optimizedResult.optimizedSizeFormatted}</strong>{' '}
+                  ({optimizedResult.reductionPercent}% smaller)
                 </span>
                 <span>
                   Resolution: <strong>{optimizedResult.width} × {optimizedResult.height}</strong>

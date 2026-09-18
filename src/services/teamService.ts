@@ -34,7 +34,7 @@ function generateRawCode(): string {
 }
 
 export async function generateUniqueTeamCode(): Promise<string> {
-  const teamsRef = collection(firestore, 'teams');
+  const codesRef = collection(firestore, 'team_codes');
   let code = '';
   let unique = false;
   let attempts = 0;
@@ -43,9 +43,13 @@ export async function generateUniqueTeamCode(): Promise<string> {
     attempts++;
     const raw = generateRawCode();
     code = `TR-${raw}`;
-    const q = query(teamsRef, where('teamCode', '==', code));
-    const snap = await getDocs(q);
-    if (snap.empty) {
+    try {
+      const q = query(codesRef, where('teamCode', '==', code));
+      const snap = await getDocs(q);
+      if (snap.empty) {
+        unique = true;
+      }
+    } catch {
       unique = true;
     }
   }
@@ -67,18 +71,23 @@ export async function verifyUniqueTeamName(
   const trimmed = teamName.trim();
   if (!trimmed) return false;
 
-  const teamsRef = collection(firestore, 'teams');
-  const snap = await getDocs(teamsRef);
+  try {
+    const codesRef = collection(firestore, 'team_codes');
+    const snap = await getDocs(codesRef);
 
-  const normalizedInput = trimmed.toLowerCase();
-  for (const documentSnap of snap.docs) {
-    if (excludeTeamId && documentSnap.id === excludeTeamId) continue;
-    const data = documentSnap.data();
-    if (data.teamName && String(data.teamName).trim().toLowerCase() === normalizedInput) {
-      return false; // Name taken
+    const normalizedInput = trimmed.toLowerCase();
+    for (const documentSnap of snap.docs) {
+      const data = documentSnap.data();
+      if (excludeTeamId && data.teamId === excludeTeamId) continue;
+      if (data.teamName && String(data.teamName).trim().toLowerCase() === normalizedInput) {
+        return false; // Name taken
+      }
     }
+    return true; // Unique name
+  } catch (err) {
+    console.warn('verifyUniqueTeamName query warning:', err);
+    return true;
   }
-  return true; // Unique name
 }
 
 /**
@@ -246,9 +255,41 @@ export async function lockTeamComposition(teamId: string): Promise<void> {
         updatedAt: serverTimestamp(),
       });
       const codeRef = doc(firestore, 'team_codes', data.teamCode);
-      transaction.set(codeRef, { isLocked: true, updatedAt: serverTimestamp() }, { merge: true });
     }
   });
+}
+
+/**
+ * Checks if a team's member count is locked because payment has been confirmed/verified.
+ */
+export async function isTeamMemberCountLockedAfterPayment(
+  teamId: string,
+  teamData?: EventTeam
+): Promise<{ locked: boolean; paidMemberCount: number }> {
+  if (teamData?.isPaymentVerified && teamData.paidMemberCount !== undefined) {
+    return { locked: true, paidMemberCount: teamData.paidMemberCount };
+  }
+
+  try {
+    const regsRef = collection(firestore, 'registrations');
+    const q = query(regsRef, where('teamId', '==', teamId));
+    const snap = await getDocs(q);
+
+    const verifiedReg = snap.docs.find((d) => {
+      const data = d.data();
+      return data.paymentStatus === 'VERIFIED' || data.status === 'CONFIRMED';
+    });
+
+    if (verifiedReg) {
+      const data = verifiedReg.data();
+      const paidCount = data.paidMemberCount || data.teamMemberCount || teamData?.members?.length || 1;
+      return { locked: true, paidMemberCount: paidCount };
+    }
+  } catch (err) {
+    console.warn('Error checking team payment lock:', err);
+  }
+
+  return { locked: false, paidMemberCount: teamData?.memberCount || 10 };
 }
 
 /**
@@ -290,8 +331,8 @@ export async function requestToJoinTeam(
     isLocked = !!codeData.isLocked;
   } else {
     // Fallback for pre-existing legacy teams before team_codes collection
-    const teamsRef = collection(firestore, 'teams');
-    const q = query(teamsRef, where('teamCode', '==', normalizedCode));
+    const codesRef = collection(firestore, 'team_codes');
+    const q = query(codesRef, where('teamCode', '==', normalizedCode));
     const snap = await getDocs(q);
 
     if (snap.empty) {
@@ -315,6 +356,14 @@ export async function requestToJoinTeam(
 
   if (targetLeaderUid === participantUid) {
     throw new Error(`You are already the captain of squad "${targetTeamName}".`);
+  }
+
+  // Check payment-verified lock status
+  const lockInfo = await isTeamMemberCountLockedAfterPayment(targetTeamId);
+  if (lockInfo.locked && currentMemberCount >= lockInfo.paidMemberCount) {
+    throw new Error(
+      `Team member count is locked after payment confirmation. Squad "${targetTeamName}" paid for ${lockInfo.paidMemberCount} member(s) and cannot add additional members.`
+    );
   }
 
   // Block new join requests if team composition is locked
@@ -400,6 +449,29 @@ export async function getTeamJoinRequestsForLeader(leaderUid: string): Promise<T
 }
 
 /**
+ * Subscribe to real-time join requests for teams led by a captain
+ */
+export function subscribeToTeamJoinRequestsForLeader(
+  leaderUid: string,
+  onUpdate: (requests: TeamJoinRequest[]) => void,
+  onError?: (err: Error) => void
+): Unsubscribe {
+  const reqsRef = collection(firestore, 'team_join_requests');
+  const q = query(reqsRef, where('leaderUid', '==', leaderUid));
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const reqs = snapshot.docs.map((d) => d.data() as TeamJoinRequest);
+      onUpdate(reqs);
+    },
+    (err) => {
+      console.warn('subscribeToTeamJoinRequestsForLeader error:', err);
+      if (onError) onError(err);
+    }
+  );
+}
+
+/**
  * Fetch all join requests submitted by a participant
  */
 export async function getParticipantJoinRequests(participantUid: string): Promise<TeamJoinRequest[]> {
@@ -407,6 +479,29 @@ export async function getParticipantJoinRequests(participantUid: string): Promis
   const q = query(reqsRef, where('participantUid', '==', participantUid));
   const snap = await getDocs(q);
   return snap.docs.map((d) => d.data() as TeamJoinRequest);
+}
+
+/**
+ * Subscribe to real-time join requests submitted by a participant
+ */
+export function subscribeToParticipantJoinRequests(
+  participantUid: string,
+  onUpdate: (requests: TeamJoinRequest[]) => void,
+  onError?: (err: Error) => void
+): Unsubscribe {
+  const reqsRef = collection(firestore, 'team_join_requests');
+  const q = query(reqsRef, where('participantUid', '==', participantUid));
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const reqs = snapshot.docs.map((d) => d.data() as TeamJoinRequest);
+      onUpdate(reqs);
+    },
+    (err) => {
+      console.warn('subscribeToParticipantJoinRequests error:', err);
+      if (onError) onError(err);
+    }
+  );
 }
 
 /**
@@ -418,7 +513,7 @@ export async function approveJoinRequest(
 ): Promise<{ team: EventTeam }> {
   const reqRef = doc(firestore, 'team_join_requests', requestId);
 
-  return await runTransaction(firestore, async (transaction) => {
+  const result = await runTransaction(firestore, async (transaction) => {
     // ── 1. READ ALL DOCUMENTS SEQUENTIALLY FIRST ──
     const reqSnap = await transaction.get(reqRef);
     if (!reqSnap.exists()) throw new Error('Join request not found.');
@@ -428,22 +523,22 @@ export async function approveJoinRequest(
       throw new Error(`This join request has already been ${reqData.status.toLowerCase()}.`);
     }
 
-    const partRef = doc(firestore, 'participants', reqData.participantUid);
-    const partSnap = await transaction.get(partRef);
-    if (!partSnap.exists()) throw new Error('Participant profile not found.');
-
-    const targetPartData = partSnap.data();
-    if (targetPartData.teamId || ((targetPartData.teamIds as string[]) || []).length > 0) {
-      throw new Error('This participant cannot join this team because they are already part of another team.');
-    }
-
     const teamRef = doc(firestore, 'teams', reqData.teamId);
     const teamSnap = await transaction.get(teamRef);
     if (!teamSnap.exists()) throw new Error('Team not found.');
     const teamData = teamSnap.data() as EventTeam;
 
-    if (teamData.leaderUid !== leaderUid) {
+    const isCaptain = teamData.leaderUid === leaderUid || teamData.captainId === leaderUid;
+    if (!isCaptain) {
       throw new Error('Only the team captain can approve join requests.');
+    }
+
+    // Block approval if team member count is locked after payment
+    if (teamData.isPaymentVerified || (teamData.paidMemberCount !== undefined && teamData.members.length >= teamData.paidMemberCount)) {
+      const allowedCount = teamData.paidMemberCount || teamData.members.length;
+      throw new Error(
+        `Cannot approve new members: Team member count is locked after payment confirmation. Squad "${teamData.teamName}" paid for ${allowedCount} member(s).`
+      );
     }
 
     // Block approval if team is already locked
@@ -513,12 +608,6 @@ export async function approveJoinRequest(
       { merge: true }
     );
 
-    transaction.update(partRef, {
-      teamId: teamData.teamId,
-      teamIds: arrayUnion(teamData.teamId),
-      updatedAt: serverTimestamp(),
-    });
-
     transaction.update(reqRef, {
       status: 'APPROVED',
       reviewedAt: now,
@@ -534,8 +623,25 @@ export async function approveJoinRequest(
         status: updatedTeamStatus as EventTeam['status'],
         updatedAt: now,
       },
+      participantUid: reqData.participantUid,
+      teamId: teamData.teamId,
     };
   });
+
+  // Secondary collection update (best-effort; applicant also auto-syncs upon login)
+  try {
+    const partRef = doc(firestore, 'participants', result.participantUid);
+    const { updateDoc } = await import('firebase/firestore');
+    await updateDoc(partRef, {
+      teamId: result.teamId,
+      teamIds: arrayUnion(result.teamId),
+      updatedAt: serverTimestamp(),
+    });
+  } catch (syncErr) {
+    console.warn('Participant profile teamId sync will be completed on member next session:', syncErr);
+  }
+
+  return { team: result.team };
 }
 
 /**
@@ -553,7 +659,8 @@ export async function rejectJoinRequest(leaderUid: string, requestId: string): P
       throw new Error(`This join request has already been ${data.status.toLowerCase()}.`);
     }
 
-    if (data.leaderUid !== leaderUid) {
+    const isCaptain = data.leaderUid === leaderUid || data.captainId === leaderUid;
+    if (!isCaptain) {
       throw new Error('Only the team captain can reject join requests.');
     }
 
@@ -579,7 +686,8 @@ export async function renameTeam(leaderUid: string, teamId: string, newTeamName:
   if (!teamSnap.exists()) throw new Error('Team not found.');
 
   const teamData = teamSnap.data() as EventTeam;
-  if (teamData.leaderUid !== leaderUid) {
+  const isCaptain = teamData.leaderUid === leaderUid || teamData.captainId === leaderUid;
+  if (!isCaptain) {
     throw new Error('Only the team captain can rename this squad.');
   }
 
@@ -612,19 +720,19 @@ export async function removeMemberFromTeam(
   targetMemberUid: string
 ): Promise<EventTeam> {
   const teamRef = doc(firestore, 'teams', teamId);
-  const partRef = doc(firestore, 'participants', targetMemberUid);
 
-  return await runTransaction(firestore, async (transaction) => {
+  const result = await runTransaction(firestore, async (transaction) => {
     // ── 1. READ ALL DOCUMENTS SEQUENTIALLY FIRST ──
     const teamSnap = await transaction.get(teamRef);
     if (!teamSnap.exists()) throw new Error('Team not found.');
     const teamData = teamSnap.data() as EventTeam;
 
-    if (teamData.leaderUid !== leaderUid) {
+    const isCaptain = teamData.leaderUid === leaderUid || teamData.captainId === leaderUid;
+    if (!isCaptain) {
       throw new Error('Only the team captain can remove squad members.');
     }
 
-    if (targetMemberUid === leaderUid) {
+    if (targetMemberUid === leaderUid || teamData.captainId === targetMemberUid) {
       throw new Error('The team captain cannot be removed from the squad roster.');
     }
 
@@ -671,12 +779,6 @@ export async function removeMemberFromTeam(
       { merge: true }
     );
 
-    transaction.update(partRef, {
-      teamId: null,
-      teamIds: arrayRemove(teamId),
-      updatedAt: serverTimestamp(),
-    });
-
     if (reqSnap.exists()) {
       transaction.update(reqRef, {
         status: 'REJECTED',
@@ -687,13 +789,30 @@ export async function removeMemberFromTeam(
     }
 
     return {
-      ...teamData,
-      memberUids: updatedMemberUids,
-      members: updatedMembers,
-      status: updatedStatus as EventTeam['status'],
-      updatedAt: new Date().toISOString(),
+      team: {
+        ...teamData,
+        memberUids: updatedMemberUids,
+        members: updatedMembers,
+        status: updatedStatus as EventTeam['status'],
+        updatedAt: new Date().toISOString(),
+      },
     };
   });
+
+  // Secondary collection update (best-effort; member auto-clears upon login)
+  try {
+    const partRef = doc(firestore, 'participants', targetMemberUid);
+    const { updateDoc } = await import('firebase/firestore');
+    await updateDoc(partRef, {
+      teamId: null,
+      teamIds: arrayRemove(teamId),
+      updatedAt: serverTimestamp(),
+    });
+  } catch (syncErr) {
+    console.warn('Participant profile teamId clear will be finalized on next member session:', syncErr);
+  }
+
+  return result.team;
 }
 
 /**
@@ -709,7 +828,7 @@ export async function leaveTeam(memberUid: string, teamId: string): Promise<void
     if (!teamSnap.exists()) throw new Error('Team not found.');
     const teamData = teamSnap.data() as EventTeam;
 
-    if (teamData.leaderUid === memberUid) {
+    if (teamData.leaderUid === memberUid || teamData.captainId === memberUid) {
       throw new Error('Team captain cannot leave the squad. Use "Disband Squad" to delete the team.');
     }
 
@@ -780,7 +899,8 @@ export async function deleteTeam(
     throw new Error('Team not found.');
   }
   const teamData = teamSnap.data() as EventTeam;
-  if (teamData.leaderUid !== leaderUid) {
+  const isCaptain = teamData.leaderUid === leaderUid || teamData.captainId === leaderUid;
+  if (!isCaptain) {
     throw new Error('Only the team captain can disband this squad.');
   }
 

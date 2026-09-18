@@ -21,15 +21,7 @@ interface SpiderSenseContextType {
 const SpiderSenseContext = createContext<SpiderSenseContextType | undefined>(undefined);
 
 export const SpiderSenseProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [notifications, setNotifications] = useState<SpiderSenseNotice[]>([
-    {
-      id: 'init-1',
-      type: 'EVENT STARTING',
-      title: 'TARAS 2K26 Countdown Active',
-      message: 'Symposium registrations opening for 10 October 2026.',
-      timestamp: 'NOW',
-    },
-  ]);
+  const [notifications, setNotifications] = useState<SpiderSenseNotice[]>([]);
 
   const notify = useCallback((type: SpiderSenseType, title: string, message: string) => {
     const id = Math.random().toString(36).substring(2, 9);

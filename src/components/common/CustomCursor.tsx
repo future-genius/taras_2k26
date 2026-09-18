@@ -15,37 +15,45 @@ export const CustomCursor: React.FC = () => {
   const rafRef = useRef<number>(0);
 
   useEffect(() => {
-    // Don't activate on touch devices
     if (typeof window === 'undefined') return;
-    if (window.matchMedia('(hover: none)').matches) return;
 
     const dot = dotRef.current;
     const ring = ringRef.current;
     if (!dot || !ring) return;
 
-    // Hide native cursor on body
-    document.body.style.cursor = 'none';
+    let isVisible = false;
 
     const onMove = (e: MouseEvent) => {
       posRef.current = { x: e.clientX, y: e.clientY };
+
+      if (!isVisible) {
+        isVisible = true;
+        if (dot) dot.style.opacity = '1';
+        if (ring) ring.style.opacity = '1';
+      }
+
+      // Dynamic CTA detection via target matching (works on portals, modals, dynamic DOM)
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        target.closest(
+          'button, a, [role="button"], input, textarea, select, [data-cursor-cta], label'
+        )
+      ) {
+        ring.classList.add('on-cta');
+      } else {
+        ring.classList.remove('on-cta');
+      }
     };
 
-    const onEnterCTA = () => ring.classList.add('on-cta');
-    const onLeaveCTA = () => ring.classList.remove('on-cta');
-
-    window.addEventListener('mousemove', onMove);
-
-    // Attach CTA hover effects
-    const addCtaListeners = () => {
-      document
-        .querySelectorAll('button, a, [role="button"], input, textarea, select, [data-cursor-cta]')
-        .forEach((el) => {
-          el.addEventListener('mouseenter', onEnterCTA);
-          el.addEventListener('mouseleave', onLeaveCTA);
-        });
+    const onMouseLeave = () => {
+      isVisible = false;
+      if (dot) dot.style.opacity = '0';
+      if (ring) ring.style.opacity = '0';
     };
 
-    addCtaListeners();
+    window.addEventListener('mousemove', onMove, { passive: true });
+    document.addEventListener('mouseleave', onMouseLeave);
 
     // Laggy ring animation loop
     const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
@@ -61,8 +69,8 @@ export const CustomCursor: React.FC = () => {
       }
 
       if (ring) {
-        ringPosRef.current.x = lerp(ringPosRef.current.x, x, 0.12);
-        ringPosRef.current.y = lerp(ringPosRef.current.y, y, 0.12);
+        ringPosRef.current.x = lerp(ringPosRef.current.x, x, 0.16);
+        ringPosRef.current.y = lerp(ringPosRef.current.y, y, 0.16);
         ring.style.left = `${ringPosRef.current.x}px`;
         ring.style.top = `${ringPosRef.current.y}px`;
       }
@@ -74,15 +82,15 @@ export const CustomCursor: React.FC = () => {
 
     return () => {
       window.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseleave', onMouseLeave);
       cancelAnimationFrame(rafRef.current);
-      document.body.style.cursor = '';
     };
   }, []);
 
   return (
     <>
-      <div ref={dotRef} className="taras-cursor-dot" aria-hidden="true" />
-      <div ref={ringRef} className="taras-cursor-ring" aria-hidden="true" />
+      <div ref={dotRef} className="taras-cursor-dot" aria-hidden="true" style={{ opacity: 0 }} />
+      <div ref={ringRef} className="taras-cursor-ring" aria-hidden="true" style={{ opacity: 0 }} />
     </>
   );
 };

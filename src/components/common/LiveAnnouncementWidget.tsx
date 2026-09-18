@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Radio, Clock, CheckCircle2, ChevronRight, AlertTriangle, Sparkles, RefreshCw } from 'lucide-react';
 import { db } from '../../config/firebase';
-import { MOCK_ANNOUNCEMENTS } from '../../data/announcements';
 
 export interface AnnouncementItem {
   id: string;
@@ -37,24 +36,18 @@ export const LiveAnnouncementWidget: React.FC<LiveAnnouncementWidgetProps> = ({
     setLoading(true);
     setError(null);
 
-    // 1. Immediate fetch from Firestore or Fallback Cache
+    // 1. Immediate fetch from Firestore
     const initialFetch = async () => {
       try {
         const rawDocs = await db.getCollection('announcements');
         if (isMounted) {
-          if (rawDocs && rawDocs.length > 0) {
-            processAndSetAnnouncements(rawDocs);
-          } else {
-            // Fallback to initial seed announcements if Firestore collection is newly initialized
-            processAndSetAnnouncements(MOCK_ANNOUNCEMENTS);
-          }
+          processAndSetAnnouncements(rawDocs || []);
           setLoading(false);
         }
       } catch (err: any) {
         console.warn('[LiveAnnouncementWidget] Firestore fetch error:', err);
         if (isMounted) {
-          // Gracefully fallback to MOCK_ANNOUNCEMENTS so UI never breaks
-          processAndSetAnnouncements(MOCK_ANNOUNCEMENTS);
+          processAndSetAnnouncements([]);
           setLoading(false);
         }
       }

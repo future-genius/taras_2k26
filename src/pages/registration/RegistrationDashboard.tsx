@@ -6,7 +6,8 @@ import {
   verifyPayment,
   rejectPayment,
 } from '../../services/paymentService';
-import { getPaymentProofSignedViewUrl } from '../../services/paymentProofStorageService';
+import { getPaymentProofViewUrl } from '../../services/paymentProofStorageService';
+import { getDriveThumbnailUrl, getDriveDirectStreamUrl } from '../../utils/driveUrlHelper';
 import type { CheckInResultState } from '../../types/eventDay';
 import type { EventRegistration } from '../../types/registration';
 import { VisualAtmosphere } from '../../components/visual/VisualAtmosphere';
@@ -40,6 +41,7 @@ import {
   Filter,
   DollarSign,
 } from 'lucide-react';
+import { ParticipantDataExportConsole } from '../../components/export/ParticipantDataExportConsole';
 
 interface RecentCheckInItem {
   id: string;
@@ -72,7 +74,7 @@ export const RegistrationDashboard: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'VERIFIED' | 'REJECTED'>('PENDING');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedReg, setSelectedReg] = useState<EventRegistration | null>(null);
-  const [signedProofUrl, setSignedProofUrl] = useState<string | null>(null);
+  const [proofViewUrl, setProofViewUrl] = useState<string | null>(null);
   const [loadingProofUrl, setLoadingProofUrl] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
@@ -108,37 +110,31 @@ export const RegistrationDashboard: React.FC = () => {
   const isProcessingScanRef = useRef(false);
   const barcodeDetectorRef = useRef<any>(null);
 
-  const fetchPaymentRegistrations = async () => {
-    setLoadingRegs(true);
-    try {
-      const list = await getRegistrationsForVerification();
-      setRegistrations(list);
-    } catch (err) {
-      console.warn('Error fetching payment registrations:', err);
-    } finally {
+  useEffect(() => {
+    // Auth Guard: Only subscribe when authoritative currentUser is authenticated and available
+    if (!user) {
       setLoadingRegs(false);
+      setIsLoadingStats(false);
+      return;
     }
-  };
 
-  const fetchStats = async () => {
+    setLoadingRegs(true);
     setIsLoadingStats(true);
-    try {
-      const allParts = await db.getCollection('participants');
-      setTotalParticipants(allParts.length);
-      const checked = allParts.filter(
+
+    // Live Real-Time Subscriptions for Registrations and Participants
+    const unsubRegistrations = db.subscribeCollection('registrations', (liveDocs) => {
+      setRegistrations(liveDocs as unknown as EventRegistration[]);
+      setLoadingRegs(false);
+    });
+
+    const unsubParticipants = db.subscribeCollection('participants', (liveParts) => {
+      setTotalParticipants(liveParts.length);
+      const checked = liveParts.filter(
         (p: any) => p.venueCheckIn === true || p.venueCheckInStatus === 'CHECKED_IN'
       );
       setCheckedInCount(checked.length);
-    } catch {
-      // Offline fallback
-    } finally {
       setIsLoadingStats(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchPaymentRegistrations();
-    fetchStats();
+    });
 
     if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
       try {
@@ -151,37 +147,32 @@ export const RegistrationDashboard: React.FC = () => {
     }
 
     return () => {
+      unsubRegistrations();
+      unsubParticipants();
       stopCamera();
     };
-  }, []);
+  }, [user]);
 
-  // Resolve secure temporary signed URL whenever a registration is inspected
+  // Resolve payment proof view URL whenever a registration is inspected
   useEffect(() => {
     let active = true;
     if (!selectedReg) {
-      setSignedProofUrl(null);
+      setProofViewUrl(null);
       return;
     }
 
-    const proofPath = selectedReg.paymentProof?.path || selectedReg.paymentScreenshotPath;
-    if (proofPath) {
-      setLoadingProofUrl(true);
-      getPaymentProofSignedViewUrl(proofPath)
-        .then((url) => {
-          if (active) setSignedProofUrl(url);
-        })
-        .catch((err) => {
-          console.warn('Failed to get signed view URL for payment proof:', err);
-          if (active) setSignedProofUrl(selectedReg.paymentScreenshotUrl || null);
-        })
-        .finally(() => {
-          if (active) setLoadingProofUrl(false);
-        });
-    } else if (selectedReg.paymentScreenshotUrl) {
-      setSignedProofUrl(selectedReg.paymentScreenshotUrl);
-    } else {
-      setSignedProofUrl(null);
-    }
+    setLoadingProofUrl(true);
+    getPaymentProofViewUrl(selectedReg as Record<string, any>)
+      .then((url) => {
+        if (active) setProofViewUrl(url);
+      })
+      .catch((err) => {
+        console.warn('Failed to get payment proof view URL:', err);
+        if (active) setProofViewUrl(null);
+      })
+      .finally(() => {
+        if (active) setLoadingProofUrl(false);
+      });
 
     return () => {
       active = false;
@@ -211,6 +202,8 @@ export const RegistrationDashboard: React.FC = () => {
       (reg.eventName && reg.eventName.toLowerCase().includes(q)) ||
       (reg.teamName && reg.teamName.toLowerCase().includes(q)) ||
       (reg.utrNumber && reg.utrNumber.toLowerCase().includes(q)) ||
+      (reg.bankName && reg.bankName.toLowerCase().includes(q)) ||
+      (reg.transactionDate && reg.transactionDate.toLowerCase().includes(q)) ||
       (reg.uid && reg.uid.toLowerCase().includes(q))
     );
   });
@@ -221,7 +214,6 @@ export const RegistrationDashboard: React.FC = () => {
     setIsProcessingAction(true);
     try {
       await verifyPayment(regId, user.uid);
-      await fetchPaymentRegistrations();
       setIsDetailModalOpen(false);
       setSelectedReg(null);
     } catch (err: any) {
@@ -249,7 +241,6 @@ export const RegistrationDashboard: React.FC = () => {
     setIsProcessingAction(true);
     try {
       await rejectPayment(selectedReg.registrationId, user.uid, finalReason);
-      await fetchPaymentRegistrations();
       setIsRejectModalOpen(false);
       setIsDetailModalOpen(false);
       setSelectedReg(null);
@@ -547,8 +538,12 @@ export const RegistrationDashboard: React.FC = () => {
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  fetchPaymentRegistrations();
-                  fetchStats();
+                  setLoadingRegs(true);
+                  setIsLoadingStats(true);
+                  setTimeout(() => {
+                    setLoadingRegs(false);
+                    setIsLoadingStats(false);
+                  }, 400);
                 }}
                 disabled={loadingRegs || isLoadingStats}
                 className="font-mono text-xs"
@@ -560,6 +555,37 @@ export const RegistrationDashboard: React.FC = () => {
               </Button>
             </div>
           </div>
+
+          {/* ── PARTICIPANT DATA EXPORT CONSOLE ── */}
+          <ParticipantDataExportConsole
+            profile={
+              participantProfile || {
+                uid: user?.uid || 'registration_staff_console',
+                role: 'registration_staff',
+                email: user?.email || 'registration.taras2k26@gmail.com',
+                fullName: 'Registration Desk Officer',
+                participantId: 'REG_STAFF',
+                registrationNumber: 'STAFF',
+                college: 'SRM Valliammai Engineering College',
+                department: 'ECE',
+                year: 'IV',
+                section: 'A',
+                phone: '0000000000',
+                registeredEvents: [],
+                teamIds: [],
+                venueCheckIn: true,
+                venueCheckInStatus: 'CHECKED_IN',
+                qrToken: '',
+                attendanceStatus: {},
+                shortlistStatus: {},
+                certificateStatus: 'READY',
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              }
+            }
+            title="Registration Team Participant Data Export"
+            subtitle="Download complete operational participant, payment verification, and team rosters in Excel (.xlsx) and CSV format."
+          />
 
           {/* Console Tab Switches */}
           <div className="flex border-b border-white/10 gap-3">
@@ -1039,14 +1065,31 @@ export const RegistrationDashboard: React.FC = () => {
                 <span className="text-amber-400 font-extrabold text-sm">{selectedReg.utrNumber || 'N/A'}</span>
               </div>
 
+              <div>
+                <span className="text-slate-400 text-[10px] uppercase block">Bank Name:</span>
+                <span className="text-white font-bold text-xs">{selectedReg.bankName || (selectedReg.paymentProof as any)?.bankName || 'Not provided'}</span>
+              </div>
+
+              <div>
+                <span className="text-slate-400 text-[10px] uppercase block">Transaction Date:</span>
+                <span className="text-white font-bold text-xs">{selectedReg.transactionDate || (selectedReg.paymentProof as any)?.transactionDate || 'Not provided'}</span>
+              </div>
+
               {/* Dual Storage Metadata */}
               <div className="col-span-1 sm:col-span-2 pt-2 border-t border-white/10 grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="p-2.5 rounded-xl bg-black/60 border border-slate-800">
-                  <span className="text-[9px] text-slate-400 uppercase font-bold block">Supabase Storage Reference</span>
+                  <span className="text-[9px] text-slate-400 uppercase font-bold block">Drive Storage Path</span>
                   <span className="text-[11px] font-mono text-emerald-400 truncate block">
-                    {(selectedReg as any).supabasePath || selectedReg.paymentScreenshotPath || 'payment-proofs/default'}
+                    {(selectedReg as any).paymentProof?.drivePath ||
+                      (selectedReg as any).googleDrivePath ||
+                      selectedReg.paymentScreenshotPath ||
+                      'N/A'}
                   </span>
-                  <span className="text-[9px] text-slate-500">Status: <strong className="text-emerald-400">STORED</strong></span>
+                  <span className="text-[9px] text-slate-500">Status: <strong className="text-emerald-400">
+                    {(selectedReg as any).paymentProof?.driveUploadStatus ||
+                     (selectedReg as any).googleDriveUploadStatus ||
+                     'SUCCESS'}
+                  </strong></span>
                 </div>
 
                 <div className="p-2.5 rounded-xl bg-black/60 border border-slate-800">
@@ -1088,22 +1131,50 @@ export const RegistrationDashboard: React.FC = () => {
               </div>
               {loadingProofUrl ? (
                 <div className="p-8 text-center text-slate-400 bg-[#0a0c10] rounded-2xl border border-slate-800 flex items-center justify-center gap-2 font-mono text-xs">
-                  <RefreshCw className="w-4 h-4 animate-spin text-[#b91c1c]" /> Retrieving secure payment proof...
+                  <RefreshCw className="w-4 h-4 animate-spin text-[#b91c1c]" /> Retrieving payment proof link...
                 </div>
-              ) : signedProofUrl ? (
-                <div className="rounded-2xl overflow-hidden border-2 border-[#b91c1c]/50 bg-black max-h-72 flex items-center justify-center relative group">
-                  <img
-                    src={signedProofUrl}
-                    alt="Payment Proof"
-                    className="max-h-72 object-contain"
-                  />
+              ) : proofViewUrl ? (
+                <div className="p-4 rounded-2xl bg-[#0a0c10] border border-[#b91c1c]/40 space-y-3">
+                  <div className="flex items-center justify-between text-[11px] text-slate-300">
+                    <span className="flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4 text-green-400 shrink-0" />
+                      Payment proof stored in Google Drive.
+                    </span>
+                    <a
+                      href={proofViewUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[10px] text-amber-400 hover:text-white underline flex items-center gap-1"
+                    >
+                      <ExternalLink className="w-3 h-3" /> Full Drive View
+                    </a>
+                  </div>
+
+                  {/* Direct Embed Image Preview */}
+                  <div className="relative rounded-xl overflow-hidden border border-white/10 bg-black/60 flex items-center justify-center min-h-[160px] max-h-[380px]">
+                    <img
+                      src={getDriveThumbnailUrl(proofViewUrl) || proofViewUrl}
+                      alt="Payment proof screenshot"
+                      className="object-contain max-h-[380px] w-auto mx-auto"
+                      loading="lazy"
+                      onError={(e) => {
+                        const target = e.currentTarget;
+                        const directUrl = getDriveDirectStreamUrl(proofViewUrl);
+                        if (directUrl && target.src !== directUrl) {
+                          target.src = directUrl;
+                        }
+                      }}
+                    />
+                  </div>
+
                   <a
-                    href={signedProofUrl}
+                    href={proofViewUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 text-white font-mono text-xs font-bold backdrop-blur-sm"
+                    className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-[#1a0000] border border-[#b91c1c]/60 text-white font-bold text-xs font-mono hover:bg-[#b91c1c]/20 transition-all"
                   >
-                    <ExternalLink className="w-4 h-4 text-[#dc2626]" /> VIEW PAYMENT PROOF (Full-Size)
+                    <ExternalLink className="w-4 h-4 text-[#dc2626]" />
+                    OPEN ORIGINAL IN GOOGLE DRIVE
                   </a>
                 </div>
               ) : (

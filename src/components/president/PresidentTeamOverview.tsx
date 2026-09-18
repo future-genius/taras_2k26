@@ -80,6 +80,8 @@ export const PresidentTeamOverview: React.FC = () => {
   const [selectedPayStatus, setSelectedPayStatus] = useState<string>('ALL');
   const [selectedParticipantType, setSelectedParticipantType] = useState<'ALL' | 'INTERNAL' | 'EXTERNAL'>('ALL');
   const [selectedTeamSize, setSelectedTeamSize] = useState<'ALL' | 'SINGLE' | '2_3' | '4_PLUS'>('ALL');
+  const [selectedRound1Result, setSelectedRound1Result] = useState<'ALL' | 'SELECTED' | 'NOT_SELECTED' | 'NOT_DECLARED'>('ALL');
+  const [selectedRound2Result, setSelectedRound2Result] = useState<'ALL' | 'WINNER' | 'RUNNER_UP' | 'NOT_SELECTED' | 'NOT_DECLARED'>('ALL');
 
   // UI States
   const [expandedTeamId, setExpandedTeamId] = useState<string | null>(null);
@@ -187,7 +189,7 @@ export const PresidentTeamOverview: React.FC = () => {
           m.fullName.toLowerCase().includes(q) ||
           m.participantId.toLowerCase().includes(q) ||
           (p?.email || '').toLowerCase().includes(q) ||
-          (p?.phone || (p as any)?.phoneNumber || '').toLowerCase().includes(q) ||
+          (p?.phone || p?.phoneNumber || '').toLowerCase().includes(q) ||
           (p?.registrationNumber || '').toLowerCase().includes(q)
         );
       });
@@ -250,6 +252,29 @@ export const PresidentTeamOverview: React.FC = () => {
       if (selectedTeamSize === '4_PLUS' && count < 4) return false;
     }
 
+    // 7. Round 1 Result Filter
+    if (selectedRound1Result !== 'ALL') {
+      const matchesR1 = registrations.some((r) => {
+        if (selectedRound1Result === 'SELECTED') return r.round1Result === 'SELECTED';
+        if (selectedRound1Result === 'NOT_SELECTED') return r.round1Result === 'NOT_SELECTED';
+        if (selectedRound1Result === 'NOT_DECLARED') return !r.round1Result || (r.round1Result as string) === 'NOT_DECLARED';
+        return true;
+      });
+      if (!matchesR1) return false;
+    }
+
+    // 8. Round 2 Final Result Filter
+    if (selectedRound2Result !== 'ALL') {
+      const matchesR2 = registrations.some((r) => {
+        if (selectedRound2Result === 'WINNER') return r.round2Result === 'WINNER';
+        if (selectedRound2Result === 'RUNNER_UP') return r.round2Result === 'RUNNER_UP';
+        if (selectedRound2Result === 'NOT_SELECTED') return r.round2Result === 'NOT_SELECTED';
+        if (selectedRound2Result === 'NOT_DECLARED') return !r.round2Result || (r.round2Result as string) === 'NOT_DECLARED';
+        return true;
+      });
+      if (!matchesR2) return false;
+    }
+
     return true;
   });
 
@@ -260,12 +285,35 @@ export const PresidentTeamOverview: React.FC = () => {
     ct.registrations.some((r) => r.paymentStatus === 'VERIFIED')
   ).length;
 
-  const handleExportExcel = () => {
-    exportPresidentTeamReportToExcel(filteredTeams, registrations);
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExportExcel = async () => {
+    setIsExporting(true);
+    setActionMessage(null);
+    try {
+      await exportPresidentTeamReportToExcel(filteredTeams, registrations);
+      setActionMessage('Excel export downloaded successfully.');
+      setTimeout(() => setActionMessage(null), 3500);
+    } catch (err: any) {
+      alert(err.message || 'Failed to export Excel report.');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   return (
     <div className="space-y-6">
+      {/* Toast Feedback */}
+      {actionMessage && (
+        <div className="p-4 rounded-2xl bg-[#061408] border border-green-500/60 text-xs font-mono text-green-300 flex items-center justify-between gap-2 shadow-lg">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
+            <span>{actionMessage}</span>
+          </div>
+          <button onClick={() => setActionMessage(null)} className="text-green-500 hover:text-white font-bold">✕</button>
+        </div>
+      )}
+
       {/* Top Banner & Stats Overview */}
       <div className="p-6 rounded-3xl border border-amber-500/50 bg-gradient-to-br from-[#180808] via-[#090b10] to-[#120606] shadow-[0_0_30px_rgba(245,158,11,0.15)] flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
         <div>
@@ -286,11 +334,12 @@ export const PresidentTeamOverview: React.FC = () => {
           <Button
             variant="glow"
             size="md"
-            icon={<Download className="w-4 h-4" />}
+            icon={<Download className={`w-4 h-4 ${isExporting ? 'animate-bounce' : ''}`} />}
+            disabled={isExporting}
             onClick={handleExportExcel}
             className="bg-emerald-600 hover:bg-emerald-500 text-white font-mono font-bold shadow-[0_0_20px_rgba(16,185,129,0.4)]"
           >
-            Download Excel Report
+            {isExporting ? 'Generating Excel…' : 'Export Registrations Excel'}
           </Button>
         </div>
       </div>
@@ -377,7 +426,7 @@ export const PresidentTeamOverview: React.FC = () => {
         </div>
 
         {/* Dropdown Filters Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 pt-2 border-t border-slate-800/60 text-xs font-mono">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3 pt-2 border-t border-slate-800/60 text-xs font-mono">
           {/* Event Filter */}
           <div className="space-y-1">
             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
@@ -465,6 +514,41 @@ export const PresidentTeamOverview: React.FC = () => {
               <option value="4_PLUS">4+ Members</option>
             </select>
           </div>
+
+          {/* Round 1 Result Filter */}
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+              Round 1 Result
+            </label>
+            <select
+              value={selectedRound1Result}
+              onChange={(e) => setSelectedRound1Result(e.target.value as any)}
+              className="w-full p-2 rounded-xl bg-[#07080b] border border-slate-800 text-slate-200 text-xs focus:outline-none focus:border-amber-500"
+            >
+              <option value="ALL">All Round 1 States</option>
+              <option value="SELECTED">Selected for Next Round</option>
+              <option value="NOT_SELECTED">Not Selected</option>
+              <option value="NOT_DECLARED">Result Not Declared</option>
+            </select>
+          </div>
+
+          {/* Round 2 Final Result Filter */}
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+              Round 2 Final Result
+            </label>
+            <select
+              value={selectedRound2Result}
+              onChange={(e) => setSelectedRound2Result(e.target.value as any)}
+              className="w-full p-2 rounded-xl bg-[#07080b] border border-slate-800 text-slate-200 text-xs focus:outline-none focus:border-amber-500"
+            >
+              <option value="ALL">All Round 2 States</option>
+              <option value="WINNER">Winner 🏆</option>
+              <option value="RUNNER_UP">Runner-Up 🥈</option>
+              <option value="NOT_SELECTED">Not Selected</option>
+              <option value="NOT_DECLARED">Result Not Declared</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -501,7 +585,7 @@ export const PresidentTeamOverview: React.FC = () => {
                   const leaderName = leader?.fullName || members.find((m) => m.isLeader)?.fullName || 'N/A';
                   const leaderRegNo = leader?.registrationNumber || 'N/A';
                   const leaderEmail = leader?.email || 'N/A';
-                  const leaderPhone = leader?.phone || (leader as any)?.phoneNumber || 'N/A';
+                  const leaderPhone = leader?.phone || leader?.phoneNumber || 'N/A';
 
                   const activeRegs = registrations.filter((r) => r.status !== 'CANCELLED' && r.status !== 'REJECTED');
                   const isVerified = activeRegs.some((r) => r.paymentStatus === 'VERIFIED');
@@ -550,15 +634,55 @@ export const PresidentTeamOverview: React.FC = () => {
                         {/* Registered Events (Max 3) */}
                         <td className="py-4 px-4">
                           {activeRegs.length > 0 ? (
-                            <div className="flex flex-col gap-1">
+                            <div className="flex flex-col gap-1.5">
                               {activeRegs.map((r) => (
-                                <span
-                                  key={r.registrationId}
-                                  className="px-2 py-0.5 rounded bg-[#100404] border border-red-900/60 text-slate-200 text-[10px] inline-flex items-center gap-1 max-w-[200px] truncate"
-                                >
-                                  <Calendar className="w-3 h-3 text-red-500 shrink-0" />
-                                  <span className="truncate">{r.eventName}</span>
-                                </span>
+                                <div key={r.registrationId} className="flex flex-col gap-0.5">
+                                  <span
+                                    className="px-2 py-0.5 rounded bg-[#100404] border border-red-900/60 text-slate-200 text-[10px] inline-flex items-center gap-1 max-w-[220px] truncate"
+                                  >
+                                    <Calendar className="w-3 h-3 text-red-500 shrink-0" />
+                                    <span className="truncate">{r.eventName}</span>
+                                  </span>
+                                  <div className="flex flex-col gap-1">
+                                    {/* Round 1 Result */}
+                                    <div>
+                                      {r.round1Result === 'SELECTED' ? (
+                                        <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-green-500/20 text-green-400 border border-green-500/30 inline-block">
+                                          R1: Selected for Next Round
+                                        </span>
+                                      ) : r.round1Result === 'NOT_SELECTED' ? (
+                                        <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30 inline-block">
+                                          R1: Not Selected for Next Round
+                                        </span>
+                                      ) : (
+                                        <span className="px-1.5 py-0.2 rounded text-[9px] font-medium bg-slate-800 text-slate-400 border border-slate-700 inline-block">
+                                          R1: Result Not Declared
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    {/* Round 2 / Final Result */}
+                                    <div>
+                                      {r.round2Result === 'WINNER' ? (
+                                        <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 inline-flex items-center gap-1">
+                                          R2: 🏆 Winner
+                                        </span>
+                                      ) : r.round2Result === 'RUNNER_UP' ? (
+                                        <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/40 inline-flex items-center gap-1">
+                                          R2: 🥈 Runner-Up
+                                        </span>
+                                      ) : r.round2Result === 'NOT_SELECTED' ? (
+                                        <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30 inline-block">
+                                          R2: Not Selected
+                                        </span>
+                                      ) : (
+                                        <span className="px-1.5 py-0.2 rounded text-[9px] font-medium bg-slate-800 text-slate-400 border border-slate-700 inline-block">
+                                          R2: Result Not Declared
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
                               ))}
                               {activeRegs.length >= 3 && (
                                 <span className="text-[9px] text-amber-400 font-bold">★ MAX 3 EVENTS LIMIT REACHED</span>
@@ -694,7 +818,7 @@ export const PresidentTeamOverview: React.FC = () => {
                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     {activeRegs.map((reg) => {
                                       const proofId = reg.paymentProofId || (reg.paymentProof as any)?.paymentProofId || 'PAY-TARAS-LEGACY';
-                                      const driveFileId = (reg as any).googleDriveFileId || (reg.paymentProof as any)?.googleDriveFileId;
+                                      const driveFileId = reg.googleDriveFileId || (reg.paymentProof as any)?.googleDriveFileId;
                                       const isRegRejected = reg.paymentStatus === 'REJECTED' || reg.status === 'REJECTED';
 
                                       return (
@@ -715,7 +839,9 @@ export const PresidentTeamOverview: React.FC = () => {
                                           <div className="text-slate-400 text-[10px] space-y-0.5">
                                             <div>Proof ID: <strong className="text-amber-300 font-mono">{proofId}</strong></div>
                                             <div>UTR: <strong className="text-white font-mono">{reg.utrNumber || 'N/A'}</strong></div>
-                                            <div>Timestamp: <strong className="text-slate-300">{(reg as any).uploadedAtIST || reg.paymentSubmittedAt || 'N/A'}</strong></div>
+                                            <div>Bank: <strong className="text-white font-mono">{reg.bankName || (reg.paymentProof as any)?.bankName || 'Not provided'}</strong></div>
+                                            <div>Date: <strong className="text-white font-mono">{reg.transactionDate || (reg.paymentProof as any)?.transactionDate || 'Not provided'}</strong></div>
+                                            <div>Timestamp: <strong className="text-slate-300">{reg.uploadedAtIST || reg.paymentSubmittedAt || 'N/A'}</strong></div>
                                             {reg.rejectionReason && (
                                               <div className="text-red-400 font-bold">Rejection Reason: {reg.rejectionReason}</div>
                                             )}
@@ -817,7 +943,7 @@ export const PresidentTeamOverview: React.FC = () => {
 
                   <div className="p-3 rounded-lg bg-[#050608] border border-slate-800">
                     <span className="text-[10px] text-slate-500 block uppercase">Phone Number</span>
-                    <strong className="text-white text-xs">{inspectedMember.profile.phone || (inspectedMember.profile as any)?.phoneNumber || 'N/A'}</strong>
+                    <strong className="text-white text-xs">{inspectedMember.profile.phone || inspectedMember.profile.phoneNumber || 'N/A'}</strong>
                   </div>
 
                   <div className="p-3 rounded-lg bg-[#050608] border border-slate-800 col-span-2">

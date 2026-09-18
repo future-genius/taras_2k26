@@ -49,6 +49,7 @@ export interface TARASEvent {
   faq: { question: string; answer: string }[];
   status: EventStatus;
   bannerImage?: string;
+  image?: string;
   registrationFee?: string;
   allowInternal?: boolean;
   allowExternal?: boolean;

@@ -5,6 +5,8 @@ import {
   subscribeToUserTeams,
   getTeamJoinRequestsForLeader,
   getParticipantJoinRequests,
+  subscribeToTeamJoinRequestsForLeader,
+  subscribeToParticipantJoinRequests,
 } from '../../services/teamService';
 import { Button } from '../common/Button';
 import { Badge } from '../common/Badge';
@@ -80,25 +82,11 @@ export const TeamHub: React.FC = () => {
   const [leavingTeamId, setLeavingTeamId] = useState<string | null>(null);
   const [teamError, setTeamError] = useState<string | null>(null);
 
-  const fetchJoinRequests = async () => {
-    if (!participantProfile?.uid) return;
-    try {
-      const leaderReqs = await getTeamJoinRequestsForLeader(participantProfile.uid);
-      setLeaderRequests(leaderReqs);
-      const myReqs = await getParticipantJoinRequests(participantProfile.uid);
-      setMySentRequests(myReqs);
-    } catch (err) {
-      console.warn('Error fetching join requests:', err);
-    }
-  };
-
   useEffect(() => {
     if (!participantProfile?.uid) return;
 
-    fetchJoinRequests();
-
     setLoadingTeams(true);
-    const unsub = subscribeToUserTeams(
+    const unsubTeams = subscribeToUserTeams(
       participantProfile.uid,
       (teams) => {
         setUserTeams(teams);
@@ -110,7 +98,21 @@ export const TeamHub: React.FC = () => {
       }
     );
 
-    return () => unsub();
+    const unsubLeaderReqs = subscribeToTeamJoinRequestsForLeader(
+      participantProfile.uid,
+      (reqs) => setLeaderRequests(reqs)
+    );
+
+    const unsubMyReqs = subscribeToParticipantJoinRequests(
+      participantProfile.uid,
+      (reqs) => setMySentRequests(reqs)
+    );
+
+    return () => {
+      unsubTeams();
+      unsubLeaderReqs();
+      unsubMyReqs();
+    };
   }, [participantProfile?.uid]);
 
   const handleCopyCode = (code: string) => {
@@ -153,7 +155,6 @@ export const TeamHub: React.FC = () => {
       await requestJoinTeam(joinCodeInput.trim());
       setJoinCodeInput('');
       setIsJoinModalOpen(false);
-      await fetchJoinRequests();
     } catch (err: any) {
       setFormError(err.message || 'Failed to submit join request.');
     } finally {
@@ -166,7 +167,6 @@ export const TeamHub: React.FC = () => {
     setTeamError(null);
     try {
       await approveJoinRequest(requestId);
-      await fetchJoinRequests();
     } catch (err: any) {
       setTeamError(err.message || 'Failed to approve join request.');
     } finally {
@@ -179,7 +179,6 @@ export const TeamHub: React.FC = () => {
     setTeamError(null);
     try {
       await rejectJoinRequest(requestId);
-      await fetchJoinRequests();
     } catch (err: any) {
       setTeamError(err.message || 'Failed to reject join request.');
     } finally {
@@ -372,8 +371,9 @@ export const TeamHub: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {userTeams.map((team) => {
             const isLeader = team.leaderUid === participantProfile?.uid;
-            const isLocked = !!team.eventRegistrationStarted;
-            const memberCountAuth = team.memberCount || team.maxTeamSize;
+            const isPaymentLocked = !!team.isPaymentVerified || (team.paidMemberCount !== undefined && (team.members?.length || 1) >= team.paidMemberCount);
+            const isLocked = !!team.eventRegistrationStarted || isPaymentLocked;
+            const memberCountAuth = team.paidMemberCount || team.memberCount || team.maxTeamSize;
             const joinedCount = team.members?.length || 1;
             const feeTotal = memberCountAuth * 200;
 
@@ -621,12 +621,14 @@ export const TeamHub: React.FC = () => {
                   </div>
                 )}
 
-                {/* Locked Notice for Captain */}
-                {isLeader && isLocked && (
+                {/* Locked Notice */}
+                {isLocked && (
                   <div className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/30 text-[11px] font-mono text-amber-300 flex items-start gap-2">
                     <Lock className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-400" />
                     <span>
-                      Squad is locked — registered for at least one event. Member composition cannot change. Subsequent event registrations for this squad are <strong>free (₹0)</strong>.
+                      {isPaymentLocked
+                        ? 'Team member count is locked after payment confirmation.'
+                        : 'Squad is locked — registered for an event. Member composition cannot change.'}
                     </span>
                   </div>
                 )}

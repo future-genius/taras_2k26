@@ -156,7 +156,9 @@ export async function updatePaymentConfig(config: Partial<RegistrationPaymentCon
 export async function submitPaymentProof(
   registrationId: string,
   utrNumber: string,
-  paymentScreenshotUrl: string
+  paymentScreenshotUrl: string,
+  bankName?: string,
+  transactionDate?: string
 ): Promise<void> {
   const trimmedUtr = utrNumber.trim();
   if (!trimmedUtr) throw new Error('UTR / Transaction ID is required.');
@@ -186,19 +188,25 @@ export async function submitPaymentProof(
     transaction.set(usedTxnRef, {
       transactionId: normalizedTxnId,
       rawUtr: trimmedUtr,
+      bankName: bankName?.trim() || '',
+      transactionDate: transactionDate?.trim() || '',
       registrationId,
       submittedByUid: auth.currentUser?.uid || '',
       submittedAt: serverTimestamp(),
     });
 
-    transaction.update(regRef, {
+    const updatePayload: Record<string, any> = {
       utrNumber: trimmedUtr,
       paymentScreenshotUrl,
       paymentSubmittedAt: now,
       status: 'PAYMENT_VERIFICATION_PENDING',
       possibleDuplicate: false,
       updatedAt: serverTimestamp(),
-    });
+    };
+    if (bankName) updatePayload.bankName = bankName.trim();
+    if (transactionDate) updatePayload.transactionDate = transactionDate.trim();
+
+    transaction.update(regRef, updatePayload);
   });
 
   // Write immutable audit log
@@ -232,20 +240,42 @@ export async function verifyPayment(
 
     const regData = regSnap.data() as EventRegistration;
     const partRef = doc(firestore, 'participants', regData.uid);
+    const teamRef = regData.teamId ? doc(firestore, 'teams', regData.teamId) : null;
 
     // Execute ALL reads before any writes
     const partSnap = await transaction.get(partRef);
+    const teamSnap = teamRef ? await transaction.get(teamRef) : null;
+
+    const paidCount = regData.teamMemberCount || (teamSnap?.exists() ? (teamSnap.data().memberCount || teamSnap.data().members?.length) : 1) || 1;
 
     // Write 1: Update registration status
     transaction.update(regRef, {
       paymentStatus: 'VERIFIED',
       status: 'CONFIRMED',
+      paidMemberCount: paidCount,
       paymentVerifiedAt: now,
       paymentVerifiedBy: staffUid,
       updatedAt: serverTimestamp(),
     });
 
-    // Write 2: Update participant registeredEvents if needed
+    // Write 2: Update team to lock member count after payment
+    if (teamRef && teamSnap?.exists()) {
+      const teamData = teamSnap.data();
+      transaction.update(teamRef, {
+        isPaymentVerified: true,
+        paidMemberCount: paidCount,
+        paymentVerifiedAt: now,
+        eventRegistrationStarted: true,
+        status: 'LOCKED',
+        updatedAt: serverTimestamp(),
+      });
+      if (teamData.teamCode) {
+        const codeRef = doc(firestore, 'team_codes', teamData.teamCode);
+        transaction.set(codeRef, { isLocked: true, isPaymentVerified: true, updatedAt: serverTimestamp() }, { merge: true });
+      }
+    }
+
+    // Write 3: Update participant registeredEvents if needed
     if (partSnap.exists()) {
       const pData = partSnap.data();
       const currentEvents = (pData.registeredEvents as string[]) || [];
@@ -468,12 +498,19 @@ export async function presidentOverrideVerify(
     previousRejectionReason = (regData as any).rejectionReason || '';
 
     const partRef = doc(firestore, 'participants', regData.uid);
+    const teamRef = regData.teamId ? doc(firestore, 'teams', regData.teamId) : null;
+
+    // Reads
     const partSnap = await transaction.get(partRef);
+    const teamSnap = teamRef ? await transaction.get(teamRef) : null;
+
+    const paidCount = regData.teamMemberCount || (teamSnap?.exists() ? (teamSnap.data().memberCount || teamSnap.data().members?.length) : 1) || 1;
 
     // Write 1: Update registration status with President Override metadata
     transaction.update(regRef, {
       paymentStatus: 'VERIFIED',
       status: 'CONFIRMED',
+      paidMemberCount: paidCount,
       paymentVerifiedAt: now,
       paymentVerifiedBy: presidentUid,
       presidentOverrideAt: now,
@@ -483,7 +520,24 @@ export async function presidentOverrideVerify(
       updatedAt: serverTimestamp(),
     });
 
-    // Write 2: Update participant registeredEvents if needed
+    // Write 2: Update team to lock member count after payment
+    if (teamRef && teamSnap?.exists()) {
+      const teamData = teamSnap.data();
+      transaction.update(teamRef, {
+        isPaymentVerified: true,
+        paidMemberCount: paidCount,
+        paymentVerifiedAt: now,
+        eventRegistrationStarted: true,
+        status: 'LOCKED',
+        updatedAt: serverTimestamp(),
+      });
+      if (teamData.teamCode) {
+        const codeRef = doc(firestore, 'team_codes', teamData.teamCode);
+        transaction.set(codeRef, { isLocked: true, isPaymentVerified: true, updatedAt: serverTimestamp() }, { merge: true });
+      }
+    }
+
+    // Write 3: Update participant registeredEvents if needed
     if (partSnap.exists()) {
       const pData = partSnap.data();
       const currentEvents = (pData.registeredEvents as string[]) || [];

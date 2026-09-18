@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../../context/AuthContext';
 import { subscribeToUserTeams, getTeamJoinRequestsForLeader, getParticipantJoinRequests } from '../../services/teamService';
 import { MOCK_EVENTS } from '../../data/events';
-import { MOCK_ANNOUNCEMENTS } from '../../data/announcements';
 import { VisualCard } from '../../components/visual/VisualCard';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
@@ -14,7 +13,7 @@ import { CertificatePreview } from '../../components/certificates/CertificatePre
 import { CertificateDownloadButton } from '../../components/certificates/CertificateDownloadButton';
 import { CertificateTemplate } from '../../components/certificates/CertificateTemplate';
 import { TeamHub } from '../../components/team/TeamHub';
-import { LiveAnnouncementWidget } from '../../components/common/LiveAnnouncementWidget';
+import { normalizeRole } from '../../utils/roleHelpers';
 import type { CertificateRecord } from '../../types/certificate';
 import type { EventTeam, TeamJoinRequest } from '../../types/team';
 import {
@@ -64,14 +63,14 @@ export const ParticipantDashboard: React.FC = () => {
   // ── Guard: redirect non-participants to their correct terminal ──────────────
   useEffect(() => {
     if (!participantProfile) return;
-    const r = (role as string || '').toLowerCase();
-    if (r === 'registration_staff') {
-      navigate('/registration', { replace: true });
-    } else if (r === 'staff' || r === 'registration_team') {
-      navigate('/staff/dashboard', { replace: true });
-    } else if (r === 'coordinator' || r === 'event_head') {
+    const r = normalizeRole(role as string);
+    if (r === 'coordinator') {
       navigate('/coordinator/dashboard', { replace: true });
-    } else if (r === 'admin' || r === 'super_admin' || r === 'president') {
+    } else if (r === 'registration_staff') {
+      navigate('/registration', { replace: true });
+    } else if (r === 'staff') {
+      navigate('/staff/dashboard', { replace: true });
+    } else if (r === 'admin' || r === 'super_admin') {
       navigate('/admin/dashboard', { replace: true });
     }
   }, [participantProfile, role, navigate]);
@@ -96,11 +95,10 @@ export const ParticipantDashboard: React.FC = () => {
   const [newTeamNameInput, setNewTeamNameInput] = useState<string>('');
   const [isRenaming, setIsRenaming] = useState<boolean>(false);
   const [removingMemberUid, setRemovingMemberUid] = useState<string | null>(null);
-
   // Hidden download refs per certificate
   const certRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
-  const fetchJoinRequests = async () => {
+  const fetchJoinRequests = useCallback(async () => {
     if (!participantProfile?.uid) return;
     try {
       const leaderReqs = await getTeamJoinRequestsForLeader(participantProfile.uid);
@@ -110,7 +108,7 @@ export const ParticipantDashboard: React.FC = () => {
     } catch (err) {
       console.warn('Error fetching join requests:', err);
     }
-  };
+  }, [participantProfile?.uid]);
 
   useEffect(() => {
     if (!participantProfile?.uid) return;
@@ -349,6 +347,8 @@ export const ParticipantDashboard: React.FC = () => {
           className="absolute inset-0 w-full h-full object-cover object-center"
           style={{ transform: 'scale(1.03)' }}
           loading="eager"
+          fetchPriority="high"
+          decoding="async"
         />
 
         <div className="absolute top-0 left-0 right-0 h-28 bg-gradient-to-b from-[#050608] to-transparent" />
@@ -455,9 +455,6 @@ export const ParticipantDashboard: React.FC = () => {
             </Link>
           )}
         </div>
-
-        {/* Live Broadcast Announcements Widget */}
-        <LiveAnnouncementWidget limitCount={3} />
 
         {/* Quick Action Bar */}
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
@@ -702,6 +699,7 @@ export const ParticipantDashboard: React.FC = () => {
                     subtitle={ev.shortDescription}
                     category={ev.category === 'TECHNICAL' ? 'technical' : 'non-technical'}
                     badge="CONFIRMED"
+                    imageUrl={ev.image || ev.bannerImage}
                   >
                     <div className="space-y-3">
                       <div className="grid grid-cols-2 gap-2 text-xs font-mono text-slate-300 border-t border-white/10 pt-3">

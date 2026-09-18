@@ -27,9 +27,10 @@ export const StaffManagementPage: React.FC = () => {
     setError(null);
     try {
       const allUsers = await db.getCollection('participants');
-      const staffMembers = (allUsers as unknown as ParticipantProfile[]).filter(
-        (p) => (p.role || '').toLowerCase() === 'staff' || (p.role || '').toUpperCase() === 'REGISTRATION_TEAM'
-      );
+      const staffMembers = (allUsers as unknown as ParticipantProfile[]).filter((p) => {
+        const role = (p.role || '').toLowerCase();
+        return role === 'staff' || role === 'registration_staff' || (p.role || '').toUpperCase() === 'REGISTRATION_TEAM';
+      });
       setStaffList(staffMembers);
     } catch (err: any) {
       console.error('Error fetching staff list:', err);

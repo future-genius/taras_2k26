@@ -216,10 +216,18 @@ export async function createEventRegistration(
 
   // Check 3-event limit
   if (teamId) {
-    const teamRegs = await getTeamRegistrations(teamId);
-    const activeTeamRegs = teamRegs.filter((r) => r.status !== 'CANCELLED' && r.status !== 'REJECTED');
-    if (activeTeamRegs.length >= 3) {
-      throw new Error('This team has already registered for the maximum of 3 events.');
+    try {
+      const teamRegs = await getTeamRegistrations(teamId);
+      const activeTeamRegs = teamRegs.filter((r) => r.status !== 'CANCELLED' && r.status !== 'REJECTED');
+      if (activeTeamRegs.length >= 3) {
+        throw new Error('This team has already registered for the maximum of 3 events.');
+      }
+    } catch (err: any) {
+      if (err?.message?.includes('maximum of 3 events')) throw err;
+      const teamEvents = (team as any)?.registeredEvents || [];
+      if (teamEvents.length >= 3) {
+        throw new Error('This team has already registered for the maximum of 3 events.');
+      }
     }
   } else {
     const userRegs = await getParticipantRegistrations(effectiveUid);
@@ -231,9 +239,17 @@ export async function createEventRegistration(
 
   // Duplicate registration check (pre-transaction for UX — Firestore transaction will double-check)
   if (teamId) {
-    const alreadyRegistered = await checkTeamAlreadyRegisteredForEvent(teamId, eventId);
-    if (alreadyRegistered) {
+    const existingEvents = (team as any)?.registeredEvents || [];
+    if (existingEvents.some((e: any) => e.eventId === eventId)) {
       throw new Error('This team is already registered for this event.');
+    }
+    try {
+      const alreadyRegistered = await checkTeamAlreadyRegisteredForEvent(teamId, eventId);
+      if (alreadyRegistered) {
+        throw new Error('This team is already registered for this event.');
+      }
+    } catch (err: any) {
+      if (err?.message?.includes('already registered')) throw err;
     }
   } else {
     // Individual event — check participant not already registered
@@ -366,13 +382,34 @@ export async function createEventRegistration(
         },
       ];
 
+      const isFreeConfirmed = calculatedFee === 0;
+
       transaction.update(teamRef, {
         eventRegistrationStarted: true,
         status: 'LOCKED',
         registeredEvents: updatedTeamEvents,
+        ...(isFreeConfirmed && {
+          isPaymentVerified: true,
+          paidMemberCount: teamMemberCount,
+          paymentVerifiedAt: now,
+        }),
         lockedAt: (teamData as any).lockedAt || now,
         updatedAt: serverTimestamp(),
       });
+
+      const codeRef = doc(firestore, 'team_codes', teamData.teamCode);
+      transaction.set(
+        codeRef,
+        {
+          teamId: teamData.teamId,
+          teamCode: teamData.teamCode,
+          leaderUid: teamData.leaderUid,
+          isLocked: true,
+          ...(isFreeConfirmed && { isPaymentVerified: true }),
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
     }
   });
 

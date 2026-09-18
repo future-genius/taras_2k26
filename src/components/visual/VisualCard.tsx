@@ -46,31 +46,39 @@ export const VisualCard: React.FC<VisualCardProps> = ({
       <div className="absolute bottom-0 left-0 w-3 h-3 border-b-2 border-l-2 border-transparent group-hover:border-[#dc2626] transition-colors duration-300 z-20" />
       <div className="absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2 border-transparent group-hover:border-[#dc2626] transition-colors duration-300 z-20" />
 
-      {/* LEVEL 3 — Component Visual Layer */}
-      <div className="relative h-44 w-full overflow-hidden">
-        {/* Card Artwork Image */}
+      {/* LEVEL 3 — Component Visual Layer (Ambient Glow + Crisp Full Artwork View) */}
+      <div className="relative h-60 sm:h-64 w-full bg-[#050608] overflow-hidden border-b border-white/10 flex items-center justify-center p-2.5">
+        {/* Ambient Blurred Backdrop matching the event poster colors */}
+        <img
+          src={bgImage}
+          alt=""
+          aria-hidden="true"
+          className="absolute inset-0 w-full h-full object-cover blur-xl opacity-35 scale-125 pointer-events-none select-none"
+        />
+
+        {/* Card Artwork Image — Full Uncropped Crisp View */}
         <img
           src={bgImage}
           alt={title}
-          className="w-full h-full object-cover object-center transition-transform duration-700 ease-out group-hover:scale-110 brightness-90 contrast-110"
+          onError={(e) => {
+            (e.currentTarget as HTMLImageElement).src = '/images/events/events-network.jpg';
+          }}
+          className="relative z-10 w-full h-full object-contain object-center transition-transform duration-500 ease-out group-hover:scale-105 drop-shadow-[0_10px_24px_rgba(0,0,0,0.85)]"
         />
 
-        {/* Black Gradient Mask Overlay */}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#0a0c10] via-[#0a0c10]/60 to-transparent" />
-
-        {/* Category Specific Red Tint */}
-        <div
-          className="absolute inset-0 opacity-40 mix-blend-color-dodge transition-opacity duration-300 group-hover:opacity-75"
-          style={{ background: categoryConfig.pattern }}
-        />
-
-        {/* LEVEL 4 — Micro Web Lines Overlay */}
-        <div className="absolute inset-0 bg-web-grid opacity-20 group-hover:opacity-50 transition-opacity" />
+        {/* Subtle Bottom Border Vignette to blend into card body */}
+        <div className="absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-[#0a0c10] via-[#0a0c10]/60 to-transparent pointer-events-none z-10" />
 
         {/* Badge Header */}
         {badge && (
-          <div className="absolute top-3 left-3 z-10">
-            <span className="px-2.5 py-1 rounded-md text-[10px] font-mono font-bold uppercase tracking-wider bg-[#1a0000]/95 text-white border border-[#dc2626]/50 shadow-md group-hover:border-[#dc2626] transition-colors">
+          <div className="absolute top-3 left-3 z-20">
+            <span
+              className={`px-2.5 py-1 rounded-md text-[10px] font-mono font-bold uppercase tracking-wider backdrop-blur-md shadow-lg border transition-all ${
+                badge.includes('INTERNAL')
+                  ? 'bg-emerald-950/90 text-emerald-300 border-emerald-500/70 shadow-emerald-950/50'
+                  : 'bg-[#1a0000]/95 text-white border-[#dc2626]/70 group-hover:border-[#dc2626]'
+              }`}
+            >
               {badge}
             </span>
           </div>

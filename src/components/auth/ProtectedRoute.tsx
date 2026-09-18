@@ -30,8 +30,8 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     );
   }
 
-  // Not authenticated at all -> send to login
-  if (!user && !participantProfile) {
+  // Authoritative Firebase Auth check: must have active user session
+  if (!user) {
     return <Navigate to="/participant/login" state={{ from: location }} replace />;
   }
 

@@ -57,6 +57,8 @@ export const VisualAtmosphere: React.FC<VisualAtmosphereProps> = ({
             className="w-full h-full object-cover object-center scale-105 transition-transform duration-1000 ease-out brightness-90 contrast-110"
             style={{ mixBlendMode: (env.blendMode as React.CSSProperties['mixBlendMode']) || 'normal' }}
             loading="eager"
+            fetchPriority="high"
+            decoding="async"
           />
 
           {/* Black Vignette & Fade Overlay — skip for screen-blended images */}

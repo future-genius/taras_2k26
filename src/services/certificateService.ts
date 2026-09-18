@@ -360,10 +360,22 @@ export async function getParticipantCertificates(
   uid?: string
 ): Promise<CertificateRecord[]> {
   try {
-    const byId = await db.queryWhere('certificate_records', 'participantId', participantId);
     let byUid: any[] = [];
     if (uid) {
-      byUid = await db.queryWhere('certificate_records', 'uid', uid);
+      try {
+        byUid = await db.queryWhere('certificate_records', 'uid', uid);
+      } catch (e) {
+        console.warn('Query by uid error:', e);
+      }
+    }
+
+    let byId: any[] = [];
+    if (participantId) {
+      try {
+        byId = await db.queryWhere('certificate_records', 'participantId', participantId);
+      } catch (e) {
+        console.warn('Query by participantId error:', e);
+      }
     }
 
     // Merge & Deduplicate

@@ -401,7 +401,8 @@ export const Home: React.FC = () => {
                 title={ev.name}
                 subtitle={ev.shortDescription}
                 category={ev.category === 'TECHNICAL' ? 'technical' : 'non-technical'}
-                badge={ev.category}
+                badge={ev.id === 'taras-01-int' ? 'INTERNAL SRM VEC' : ev.id === 'taras-01-ext' ? 'NATIONAL EXTERNAL' : ev.category}
+                imageUrl={ev.image || ev.bannerImage}
               >
                 <div className="flex items-center justify-between pt-3 border-t border-white/10 text-xs font-mono">
                   <span className="text-[#dc2626] font-bold group-hover:drop-shadow-[0_0_8px_rgba(220,38,38,0.8)] transition-all">

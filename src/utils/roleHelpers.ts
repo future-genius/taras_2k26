@@ -45,13 +45,12 @@ export function isCoordinatorOrAbove(role: UserRole | string | undefined | null)
   return r === 'super_admin' || r === 'admin' || r === 'coordinator';
 }
 
-/** Returns true for staff and above */
+/** Returns true for staff and above (staff and registration_staff, inherited by admin/super_admin) */
 export function isStaffOrAbove(role: UserRole | string | undefined | null): boolean {
   const r = normalizeRole(role as string);
   return (
     r === 'super_admin' ||
     r === 'admin' ||
-    r === 'coordinator' ||
     r === 'staff' ||
     r === 'registration_staff'
   );
@@ -103,8 +102,8 @@ export function canAssignRole(
     // Only super_admin can create/modify admins
     return actor === 'super_admin';
   }
-  if (target === 'coordinator' || target === 'staff') {
-    // super_admin or admin can create coordinators/staff
+  if (target === 'coordinator' || target === 'staff' || target === 'registration_staff' || target === 'participant') {
+    // super_admin or admin can assign coordinators, staff, registration staff, or demote to participant
     return actor === 'super_admin' || actor === 'admin';
   }
   return false;

@@ -4,25 +4,24 @@ import { useAuth } from '../context/AuthContext';
 import { VisualAtmosphere } from '../components/visual/VisualAtmosphere';
 import { Button } from '../components/common/Button';
 import { ShieldAlert, ArrowLeft, Home, Lock } from 'lucide-react';
+import { normalizeRole, getRoleDisplayName } from '../utils/roleHelpers';
 
 export const AccessDeniedPage: React.FC = () => {
   const { role, participantProfile } = useAuth();
   const navigate = useNavigate();
 
   const getRoleDashboardPath = () => {
-    switch (role) {
+    const r = normalizeRole(role as string);
+    switch (r) {
       case 'admin':
       case 'super_admin':
-      case 'PRESIDENT':
         return '/admin/dashboard';
+      case 'coordinator':
+        return '/coordinator/dashboard';
       case 'registration_staff':
         return '/registration';
       case 'staff':
-      case 'REGISTRATION_TEAM':
         return '/staff/dashboard';
-      case 'coordinator':
-      case 'EVENT_HEAD':
-        return '/coordinator/dashboard';
       default:
         return '/participant/dashboard';
     }

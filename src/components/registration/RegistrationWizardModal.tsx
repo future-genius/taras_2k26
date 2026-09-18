@@ -19,6 +19,7 @@ import { getPaymentConfig } from '../../services/paymentService';
 import {
   savePaymentProofSubmissionToFirestore,
   resubmitPaymentProofToFirestore,
+  type DrivePaymentProofMetadata,
 } from '../../services/paymentProofStorageService';
 import {
   PaymentProofUploader,
@@ -88,6 +89,8 @@ export const RegistrationWizardModal: React.FC<RegistrationWizardModalProps> = (
 
   // Payment proof state
   const [utrInput, setUtrInput] = useState(existingRegistration?.utrNumber || '');
+  const [bankNameInput, setBankNameInput] = useState(existingRegistration?.bankName || '');
+  const [transactionDateInput, setTransactionDateInput] = useState(existingRegistration?.transactionDate || '');
   const uploaderRef = useRef<PaymentProofUploaderRef>(null);
   const [uploaderState, setUploaderState] = useState<UploadState>('idle');
 
@@ -143,6 +146,8 @@ export const RegistrationWizardModal: React.FC<RegistrationWizardModalProps> = (
       setStep(existingRegistration.calculatedFee === 0 ? 3 : 2);
       setCreatedReg(existingRegistration);
       setUtrInput(existingRegistration.utrNumber || '');
+      setBankNameInput(existingRegistration.bankName || '');
+      setTransactionDateInput(existingRegistration.transactionDate || '');
       return;
     }
 
@@ -246,6 +251,23 @@ export const RegistrationWizardModal: React.FC<RegistrationWizardModalProps> = (
   const handlePaymentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    const trimmedBankName = bankNameInput.trim();
+    if (!trimmedBankName) {
+      setErrorMsg('Bank Name is required.');
+      return;
+    }
+
+    const trimmedTransactionDate = transactionDateInput.trim();
+    if (!trimmedTransactionDate) {
+      setErrorMsg('Transaction Date is required.');
+      return;
+    }
+    const parsedDate = new Date(trimmedTransactionDate);
+    if (isNaN(parsedDate.getTime())) {
+      setErrorMsg('Please select a valid Transaction Date.');
+      return;
+    }
+
     const trimmedUtr = utrInput.trim();
     if (!trimmedUtr) {
       setErrorMsg('UTR / Transaction ID is required.');
@@ -255,7 +277,13 @@ export const RegistrationWizardModal: React.FC<RegistrationWizardModalProps> = (
       setErrorMsg('Registration not found. Please close and try again.');
       return;
     }
-    if (!uploaderRef.current?.isReady) {
+    const existingProofUrl =
+      createdReg?.paymentScreenshotUrl ||
+      existingRegistration?.paymentScreenshotUrl ||
+      (createdReg as any)?.paymentProof?.driveFileUrl ||
+      (existingRegistration as any)?.paymentProof?.driveFileUrl;
+
+    if (!uploaderRef.current?.isReady && !existingProofUrl) {
       setErrorMsg('Payment screenshot proof is required. Please select an image.');
       return;
     }
@@ -265,19 +293,43 @@ export const RegistrationWizardModal: React.FC<RegistrationWizardModalProps> = (
 
     try {
       const regId = createdReg.registrationId;
-
-      const uploadResult = await uploaderRef.current.upload();
+      let uploadResult: DrivePaymentProofMetadata;
+      if (uploaderRef.current) {
+        uploadResult = await uploaderRef.current.upload();
+      } else if (existingProofUrl) {
+        uploadResult = {
+          paymentProofId: `EXISTING-${regId}`,
+          provider: 'googledrive',
+          driveFileId: '',
+          driveFileUrl: existingProofUrl,
+          driveFileName: 'existing_payment_proof.webp',
+          driveFolderId: '',
+          drivePath: '',
+          driveUploadStatus: 'SUCCESS',
+          fileSize: 0,
+          contentType: 'image/webp',
+          uploadedAt: new Date().toISOString(),
+          uploadedAtIST: new Date().toISOString(),
+          signedUrl: existingProofUrl,
+        };
+      } else {
+        throw new Error('Payment screenshot proof is required. Please select an image.');
+      }
 
       if (existingRegistration?.paymentStatus === 'REJECTED') {
         await resubmitPaymentProofToFirestore({
           registrationId: regId,
           utrNumber: trimmedUtr,
+          bankName: trimmedBankName,
+          transactionDate: trimmedTransactionDate,
           proofMetadata: uploadResult,
         });
       } else {
         await savePaymentProofSubmissionToFirestore({
           registrationId: regId,
           utrNumber: trimmedUtr,
+          bankName: trimmedBankName,
+          transactionDate: trimmedTransactionDate,
           proofMetadata: uploadResult,
         });
       }
@@ -376,9 +428,31 @@ export const RegistrationWizardModal: React.FC<RegistrationWizardModalProps> = (
         {step === 1 && (
           <div className="space-y-5">
             {/* Event Summary */}
-            <div className="p-4 rounded-2xl bg-[#0a0c10] border border-white/10 space-y-3">
+            <div className="p-4 rounded-2xl bg-[#0a0c10] border border-white/10 space-y-3 overflow-hidden">
+              {/* Event Poster Artwork Banner */}
+              {(event.image || event.bannerImage) && (
+                <div className="relative w-full h-36 rounded-xl overflow-hidden bg-[#050608] border border-white/10 flex items-center justify-center p-2 mb-2">
+                  <img
+                    src={event.image || event.bannerImage}
+                    alt=""
+                    aria-hidden="true"
+                    className="absolute inset-0 w-full h-full object-cover blur-lg opacity-30 scale-110 pointer-events-none"
+                  />
+                  <img
+                    src={event.image || event.bannerImage}
+                    alt={event.name}
+                    className="relative z-10 w-full h-full object-contain drop-shadow-md"
+                  />
+                  <div className="absolute top-2 left-2 z-20">
+                    <span className="px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase bg-[#1a0000]/90 text-white border border-[#dc2626]/60">
+                      OFFICIAL TRACK ARTWORK
+                    </span>
+                  </div>
+                </div>
+              )}
+
               <div className="flex items-center justify-between border-b border-white/10 pb-2">
-                <span className="text-[10px] text-slate-400 uppercase">Event</span>
+                <span className="text-[10px] text-slate-400 uppercase font-mono">Event Track</span>
                 <Badge variant="red">{event.category}</Badge>
               </div>
               <div className="space-y-1">
@@ -586,6 +660,37 @@ export const RegistrationWizardModal: React.FC<RegistrationWizardModalProps> = (
 
             {/* Proof Inputs */}
             <div className="space-y-4 pt-2 border-t border-white/10">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-widest mb-1">
+                    BANK NAME <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. State Bank of India, HDFC"
+                    value={bankNameInput}
+                    onChange={(e) => setBankNameInput(e.target.value)}
+                    disabled={isSubmitting || uploaderState === 'uploading'}
+                    className="w-full px-3.5 py-2.5 bg-[#0a0c10] border border-[#b91c1c]/50 rounded-xl text-xs font-mono text-white focus:outline-none focus:border-[#b91c1c] disabled:opacity-50"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-widest mb-1">
+                    TRANSACTION DATE <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={transactionDateInput}
+                    onChange={(e) => setTransactionDateInput(e.target.value)}
+                    disabled={isSubmitting || uploaderState === 'uploading'}
+                    className="w-full px-3.5 py-2.5 bg-[#0a0c10] border border-[#b91c1c]/50 rounded-xl text-xs font-mono text-white focus:outline-none focus:border-[#b91c1c] disabled:opacity-50"
+                  />
+                </div>
+              </div>
+
               <div>
                 <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-widest mb-1">
                   12-DIGIT TRANSACTION ID / UTR NUMBER <span className="text-red-500">*</span>
@@ -603,12 +708,18 @@ export const RegistrationWizardModal: React.FC<RegistrationWizardModalProps> = (
 
               <div>
                 <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-widest mb-1.5">
-                  PAYMENT RECEIPT SCREENSHOT (UNDER 1 MB) <span className="text-red-500">*</span>
+                  PAYMENT RECEIPT SCREENSHOT (MAX 3 MB) <span className="text-red-500">*</span>
                 </label>
                 <PaymentProofUploader
                   ref={uploaderRef}
                   registrationId={createdReg.registrationId}
-                  existingScreenshotUrl={existingRegistration?.paymentScreenshotUrl}
+                  eventName={event.name}
+                  existingScreenshotUrl={
+                    createdReg.paymentScreenshotUrl ||
+                    existingRegistration?.paymentScreenshotUrl ||
+                    (createdReg as any)?.paymentProof?.driveFileUrl ||
+                    (existingRegistration as any)?.paymentProof?.driveFileUrl
+                  }
                   onStateChange={setUploaderState}
                   disabled={isSubmitting}
                 />

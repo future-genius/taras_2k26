@@ -15,17 +15,13 @@ export const ResultsPage: React.FC = () => {
   const [expandedResultId, setExpandedResultId] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchResults = async () => {
-      try {
-        const docs = await db.queryWhere('results', 'status', 'PUBLISHED');
-        if (docs.length > 0) {
-          setLiveResults(docs as unknown as EventResult[]);
-        }
-      } catch {
-        // Fallback to static results if Firestore offline
+    const unsubscribe = db.subscribeQueryWhere('results', 'status', 'PUBLISHED', (docs) => {
+      if (docs && docs.length > 0) {
+        setLiveResults(docs as unknown as EventResult[]);
       }
-    };
-    fetchResults();
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const rawResults: EventResult[] = liveResults.length > 0

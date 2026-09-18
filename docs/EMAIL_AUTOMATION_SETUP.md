@@ -34,7 +34,7 @@ Configure these secrets in your GitHub Repository under **Settings → Secrets a
 |---|---|---|
 | `FIREBASE_SERVICE_ACCOUNT` | **Required**. Firebase Admin SDK JSON private key. | Complete JSON string starting with `{"type": "service_account", ...}` |
 | `BREVO_API_KEY` | **Required**. Brevo v3 Transactional Email API Key. | `xkeysib-...` |
-| `BREVO_SENDER_EMAIL` | Optional (Default: `taras2k26@valliammai.edu.in`). Verified Brevo sender email. | `taras2k26@valliammai.edu.in` |
+| `BREVO_SENDER_EMAIL` | Optional (Default: `taras2k26@gmail.com`). Verified Brevo sender email. | `taras2k26@gmail.com` |
 | `BREVO_SENDER_NAME` | Optional (Default: `TARAS 2K26 Team`). Sender display name. | `TARAS 2K26 Team` |
 
 ---
@@ -53,7 +53,7 @@ Configure these secrets in your GitHub Repository under **Settings → Secrets a
 2. Navigate to **SMTP & API Keys** → **API Keys**.
 3. Generate a new v3 API key.
 4. Copy the API key and add it to GitHub Secret `BREVO_API_KEY`.
-5. Under **Senders & IP**, add and verify your sender email address (e.g. `taras2k26@valliammai.edu.in`).
+5. Under **Senders & IP**, add and verify your sender email address (e.g. `taras2k26@gmail.com`).
 
 ---
 

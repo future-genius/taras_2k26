@@ -3,11 +3,13 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Button } from '../../components/common/Button';
 import { VisualAtmosphere } from '../../components/visual/VisualAtmosphere';
-import { Shield, Mail, Lock, ArrowRight, AlertCircle } from 'lucide-react';
+import { Shield, Mail, Lock, ArrowRight, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { normalizeRole } from '../../utils/roleHelpers';
 
 export const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -18,12 +20,11 @@ export const LoginPage: React.FC = () => {
 
   /** Map a canonical Firestore role string to the correct dashboard route */
   const getDefaultRoute = (role: string, fallback: string): string => {
-    const r = role.toLowerCase();
-    if (r === 'super_admin' || r === 'president') return '/admin/dashboard';
-    if (r === 'admin') return '/admin/dashboard';
+    const r = normalizeRole(role);
+    if (r === 'super_admin' || r === 'admin') return '/admin/dashboard';
+    if (r === 'coordinator') return '/coordinator/dashboard';
     if (r === 'registration_staff') return '/registration';
-    if (r === 'staff' || r === 'registration_team') return '/staff/dashboard';
-    if (r === 'coordinator' || r === 'event_head') return '/coordinator/dashboard';
+    if (r === 'staff') return '/staff/dashboard';
     // participants default to wherever they were trying to go (or dashboard)
     return fallback;
   };
@@ -113,13 +114,21 @@ export const LoginPage: React.FC = () => {
               <div className="relative">
                 <Lock className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#b91c1c]" />
                 <input
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   required
                   placeholder="••••••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-[#0a0c10]/90 border border-[#b91c1c]/40 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#b91c1c] transition-colors"
+                  className="w-full pl-10 pr-10 py-2.5 bg-[#0a0c10]/90 border border-[#b91c1c]/40 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#b91c1c] transition-colors"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1 focus:outline-none"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
             </div>
 

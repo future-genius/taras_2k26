@@ -4,6 +4,7 @@ import {
   signUpWithEmail,
   signInWithEmail,
   sendPasswordReset,
+  updateUserPassword,
   signOutUser,
   saveSessionUser,
   subscribeToAuthState,
@@ -60,6 +61,7 @@ interface AuthContextType {
   register: (email: string, pass: string, data: RegisterData) => Promise<void>;
   logout: () => void;
   resetPassword: (email: string) => Promise<void>;
+  changePassword: (newPassword: string) => Promise<void>;
   updateParticipantProfile: (data: Partial<ParticipantProfile>) => Promise<void>;
   registerForEvent: (
     eventId: string,
@@ -173,7 +175,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [syncProfile]);
 
   // Derived Role Checks — using centralized roleHelpers
-  const rawRole = participantProfile?.role;
+  const emailLower = (authUser?.email || participantProfile?.email || '').toLowerCase().trim();
+  const emailRoleOverride: UserRole | null =
+    emailLower === 'president.taras2k26@gmail.com' ||
+    emailLower === 'to.hariharanr@gmail.com' ||
+    emailLower === 'hawkeyehari@gmail.com'
+      ? 'super_admin'
+      : emailLower === 'registration.taras2k26@gmail.com' ||
+        emailLower === 'registration.demo@taras2k26.test'
+      ? 'registration_staff'
+      : null;
+
+  const rawRole = emailRoleOverride || participantProfile?.role;
   const isSuperAdminUser = checkSuperAdmin(rawRole);
   const isAdmin = isAdminOrAbove(rawRole);           // true for super_admin AND admin
   const isCoordinator = isCoordinatorOrAbove(rawRole);
@@ -185,7 +198,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const canonicalRole: UserRole = getCanonicalRole(rawRole);
 
   // ── Register ────────────────────────────────────────────────────────────────
-  // Security Principle: User can NEVER select role at registration. Always 'participant'.
+  // Security Principle: Disallow self-assignment of admin roles, but respect email overrides and pre-provisioned profiles
   const register = async (email: string, pass: string, profileData: RegisterData) => {
     setError(null);
     setLoading(true);
@@ -200,24 +213,52 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       saveSessionUser(user);
       setAuthUser(user);
 
-      const participantId = generateParticipantId();
-      const qrToken = generateQRToken(participantId);
+      const emailLower = email.trim().toLowerCase();
+      const emailRoleOverride: UserRole | null =
+        emailLower === 'president.taras2k26@gmail.com' ||
+        emailLower === 'to.hariharanr@gmail.com' ||
+        emailLower === 'hawkeyehari@gmail.com'
+          ? 'super_admin'
+          : emailLower === 'registration.taras2k26@gmail.com' ||
+            emailLower === 'registration.demo@taras2k26.test'
+          ? 'registration_staff'
+          : null;
+
+      // Check if an admin pre-provisioned a profile by email (e.g. from Staff/Coordinator management)
+      let preProvisioned: Record<string, unknown> | null = null;
+      try {
+        const matches = await db.queryWhere('participants', 'email', emailLower);
+        if (matches && matches.length > 0) {
+          preProvisioned = matches[0];
+        }
+      } catch (err) {
+        console.warn('Could not query pre-provisioned profiles:', err);
+      }
+
+      const participantId = (preProvisioned?.participantId as string) || generateParticipantId();
+      const qrToken = (preProvisioned?.qrToken as string) || generateQRToken(participantId);
+      const assignedEventIds = (preProvisioned?.assignedEventIds as string[]) || [];
+      const initialRole: UserRole =
+        emailRoleOverride ||
+        (preProvisioned?.role as UserRole) ||
+        'participant';
+
       const now = new Date().toISOString();
 
       const newProfile: ParticipantProfile = {
         uid: user.uid,
         participantId,
         fullName: profileData.fullName,
-        email,
+        email: emailLower,
         phone: profileData.phone,
         college: profileData.college,
         department: profileData.department,
         year: profileData.year,
-        section: profileData.section || 'A',
+        section: profileData.section || '',
         registrationNumber: normalizedRegNo,
         participantType,
-        role: 'participant',
-        assignedEventIds: [],
+        role: initialRole,
+        assignedEventIds,
         qrToken,
         venueCheckIn: false,
         venueCheckInStatus: 'NOT_CHECKED_IN',
@@ -231,6 +272,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
 
       await db.setDoc('participants', user.uid, newProfile as unknown as Record<string, unknown>);
+
+      // Clean up legacy pre-provisioned doc if ID differed
+      if (preProvisioned && preProvisioned.id && preProvisioned.id !== user.uid) {
+        await db.deleteDoc('participants', preProvisioned.id as string).catch(() => null);
+      }
+
       syncProfile(newProfile);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Registration failed';
@@ -250,29 +297,75 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       saveSessionUser(user);
       setAuthUser(user);
 
-      // Try to load existing profile
-      const stored = await db.getDoc('participants', user.uid);
+      const emailLower = email.trim().toLowerCase();
+      const emailRoleOverride: UserRole | null =
+        emailLower === 'president.taras2k26@gmail.com' ||
+        emailLower === 'to.hariharanr@gmail.com' ||
+        emailLower === 'hawkeyehari@gmail.com'
+          ? 'super_admin'
+          : emailLower === 'registration.taras2k26@gmail.com' ||
+            emailLower === 'registration.demo@taras2k26.test'
+          ? 'registration_staff'
+          : null;
+
+      // Try to load existing profile by UID
+      let stored = await db.getDoc('participants', user.uid);
+
+      // Reconcile pre-provisioned profile by email if not found by UID
+      if (!stored.exists) {
+        try {
+          const matches = await db.queryWhere('participants', 'email', emailLower);
+          if (matches && matches.length > 0) {
+            const matchedDoc = matches[0];
+            const matchedRole = (matchedDoc.role as UserRole) || 'participant';
+            const finalRole = emailRoleOverride || matchedRole;
+            const reconciledProfile: ParticipantProfile = {
+              ...(matchedDoc as unknown as ParticipantProfile),
+              uid: user.uid,
+              email: emailLower,
+              role: finalRole,
+              updatedAt: new Date().toISOString(),
+            };
+
+            await db.setDoc('participants', user.uid, reconciledProfile as unknown as Record<string, unknown>);
+
+            if (matchedDoc.id && matchedDoc.id !== user.uid) {
+              await db.deleteDoc('participants', matchedDoc.id as string).catch(() => null);
+            }
+
+            stored = { exists: true, data: reconciledProfile as unknown as Record<string, unknown> };
+          }
+        } catch (err) {
+          console.warn('Reconcile pre-provisioned profile error:', err);
+        }
+      }
+
       let resolvedRole = 'participant';
       if (stored.exists && stored.data) {
-        const profile = stored.data as unknown as ParticipantProfile;
+        let profile = stored.data as unknown as ParticipantProfile;
+        if (emailRoleOverride && profile.role !== emailRoleOverride) {
+          profile = { ...profile, role: emailRoleOverride, updatedAt: new Date().toISOString() };
+          await db.updateDoc('participants', user.uid, { role: emailRoleOverride }).catch(() => null);
+        }
         syncProfile(profile);
         resolvedRole = (profile.role as string) || 'participant';
       } else {
         // Create basic profile if first time
         const participantId = generateParticipantId();
         const now = new Date().toISOString();
+        const initialRole = emailRoleOverride || 'participant';
         const newProfile: ParticipantProfile = {
           uid: user.uid,
           participantId,
           fullName: email.split('@')[0],
-          email,
+          email: emailLower,
           phone: '',
           college: '',
           department: 'ECE',
           year: 'III',
           section: 'A',
           registrationNumber: '',
-          role: 'participant',
+          role: initialRole,
           assignedEventIds: [],
           qrToken: generateQRToken(participantId),
           venueCheckIn: false,
@@ -287,7 +380,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
         await db.setDoc('participants', user.uid, newProfile as unknown as Record<string, unknown>);
         syncProfile(newProfile);
-        resolvedRole = 'participant';
+        resolvedRole = initialRole;
       }
       return { role: resolvedRole };
     } catch (err: unknown) {
@@ -314,6 +407,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await sendPasswordReset(email);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Password reset failed';
+      setError(msg);
+      throw err;
+    }
+  };
+
+  // ── Change Password ─────────────────────────────────────────────────────────
+  const changePassword = async (newPassword: string) => {
+    if (!participantProfile?.uid) throw new Error('No user profile found.');
+    setError(null);
+    try {
+      await updateUserPassword(newPassword);
+      await db.updateDoc('participants', participantProfile.uid, {
+        mustChangePassword: false,
+        updatedAt: new Date().toISOString(),
+      });
+      syncProfile({ ...participantProfile, mustChangePassword: false });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Password update failed';
       setError(msg);
       throw err;
     }
@@ -552,6 +663,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         register,
         logout,
         resetPassword,
+        changePassword,
         updateParticipantProfile,
         registerForEvent,
         createTeam,

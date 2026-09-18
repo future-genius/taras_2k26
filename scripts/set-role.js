@@ -52,26 +52,37 @@ async function executeRoleElevation() {
     process.exit(1);
   }
 
+  const canonicalRole = targetRole === 'president' ? 'super_admin' : targetRole;
+  const isSuperAdmin = canonicalRole === 'super_admin';
+  const isAdmin = isSuperAdmin || canonicalRole === 'admin';
+  const isStaff = isAdmin || canonicalRole === 'staff' || canonicalRole === 'registration_staff';
+  const isCoordinator = isAdmin || canonicalRole === 'coordinator';
+
   const updatedClaims = {
     ...existingClaims,
-    user_role: targetRole,
+    role: canonicalRole,
+    user_role: canonicalRole,
+    admin: isAdmin,
+    super_admin: isSuperAdmin,
+    staff: isStaff,
+    coordinator: isCoordinator,
   };
 
   await auth.setCustomUserClaims(uid, updatedClaims);
-  console.log(`✅ Firebase Auth Custom Claim set: user_role = "${targetRole}"`);
+  console.log(`✅ Firebase Auth Custom Claims set:`, updatedClaims);
 
   const participantRef = db.collection('participants').doc(uid);
   await participantRef.set(
     {
-      role: targetRole,
+      role: canonicalRole,
       ...(assignedEvents.length > 0 && { assignedEventIds: assignedEvents }),
-      ...(targetRole === 'super_admin' && { isPrimarySuperAdmin: true }),
+      ...(canonicalRole === 'super_admin' && { isPrimarySuperAdmin: true }),
       updatedAt: new Date().toISOString(),
     },
     { merge: true }
   );
 
-  console.log(`✅ Firestore Document "participants/${uid}" synchronized: role = "${targetRole}"`);
+  console.log(`✅ Firestore Document "participants/${uid}" synchronized: role = "${canonicalRole}"`);
   console.log(`\n[IMPORTANT] The elevated user must log in or refresh their Firebase ID token via auth.currentUser.getIdToken(true) to receive the new custom claim in Supabase Storage requests.`);
 }
 

@@ -3,17 +3,17 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Button } from '../../components/common/Button';
 import { VisualAtmosphere } from '../../components/visual/VisualAtmosphere';
-import { Shield, Mail, Lock, User, Phone, Building, UserCheck, AlertCircle, ArrowRight } from 'lucide-react';
+import { Shield, Mail, Lock, User, Phone, Building, UserCheck, AlertCircle, ArrowRight, Eye, EyeOff } from 'lucide-react';
 
 export const RegisterPage: React.FC = () => {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [phone, setPhone] = useState('');
   const [college, setCollege] = useState('');
   const [department, setDepartment] = useState('ECE');
   const [year, setYear] = useState<'I' | 'II' | 'III' | 'IV' | 'PG'>('III');
-  const [section, setSection] = useState('A');
   const [registrationNumber, setRegistrationNumber] = useState('');
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -40,7 +40,6 @@ export const RegisterPage: React.FC = () => {
         college: college.trim(),
         department: department.trim(),
         year,
-        section: section.trim(),
         registrationNumber: trimmedRegNo,
       });
       navigate('/participant/dashboard');
@@ -144,13 +143,21 @@ export const RegisterPage: React.FC = () => {
               <div className="relative">
                 <Lock className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#b91c1c]" />
                 <input
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   required
                   placeholder="At least 6 characters"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-[#0a0c10]/90 border border-[#b91c1c]/40 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#b91c1c] transition-colors"
+                  className="w-full pl-10 pr-10 py-2.5 bg-[#0a0c10]/90 border border-[#b91c1c]/40 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#b91c1c] transition-colors"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1 focus:outline-none"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
             </div>
 
@@ -172,8 +179,8 @@ export const RegisterPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Dept, Year, Section, Reg No */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {/* Dept, Year, Reg No */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 font-mono">
                   Dept
@@ -202,18 +209,6 @@ export const RegisterPage: React.FC = () => {
                   <option value="IV">4th Year (IV)</option>
                   <option value="PG">PG Scholar</option>
                 </select>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 font-mono">
-                  Section
-                </label>
-                <input
-                  type="text"
-                  value={section}
-                  onChange={(e) => setSection(e.target.value)}
-                  className="w-full px-3 py-2.5 bg-[#0a0c10]/90 border border-[#b91c1c]/40 rounded-xl text-xs text-white uppercase focus:outline-none"
-                />
               </div>
 
               <div>

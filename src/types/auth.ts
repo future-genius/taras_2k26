@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'staff' | 'registration_staff' | 'coordinator' | 'participant' | 'PRESIDENT' | 'REGISTRATION_TEAM' | 'EVENT_HEAD' | 'PARTICIPANT';
+export type UserRole = 'super_admin' | 'admin' | 'staff' | 'registration_staff' | 'coordinator' | 'participant' | 'PRESIDENT' | 'REGISTRATION_TEAM' | 'EVENT_HEAD' | 'PARTICIPANT';
 
 export interface AuthUser {
   uid: string;
@@ -17,6 +17,16 @@ export interface RolePermissions {
 }
 
 export const ROLE_PERMISSIONS: Record<string, RolePermissions> = {
+  super_admin: {
+    canManageUsers: true,
+    canManageEvents: true,
+    canMarkVenueAttendance: true,
+    canMarkEventAttendance: true,
+    canPublishAnnouncements: true,
+    canManageSchedules: true,
+    canManageCertificates: true,
+    canViewAllRegistrations: true,
+  },
   admin: {
     canManageUsers: true,
     canManageEvents: true,

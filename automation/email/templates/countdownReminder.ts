@@ -132,7 +132,7 @@ export function generateCountdownReminderEmail(data: CountdownEmailData): { subj
               <!-- FOOTER & SUPPORT -->
               <div style="text-align: center; border-top: 1px solid #262636; padding-top: 20px; margin-top: 30px;">
                 <p style="font-size: 13px; color: #888899; margin-bottom: 8px;">
-                  Have questions? Contact us at <a href="mailto:taras2k26@valliammai.edu.in" style="color: #ff4d4d; text-decoration: none;">taras2k26@valliammai.edu.in</a>
+                  Have questions? Contact us at <a href="mailto:taras2k26@gmail.com" style="color: #ff4d4d; text-decoration: none;">taras2k26@gmail.com</a>
                 </p>
                 <p style="font-size: 12px; color: #555566; margin: 0;">
                   Department of ECE • SRM Valliammai Engineering College • Kattankulathur
@@ -169,7 +169,7 @@ Event Day Checklist:
 2. Participant ID (${data.participantId}) / QR Pass
 3. Presentation slides on USB Drive (if applicable)
 
-Contact: taras2k26@valliammai.edu.in`;
+Contact: taras2k26@gmail.com`;
 
   return { subject, html, text };
 }

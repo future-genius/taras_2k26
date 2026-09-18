@@ -1,4 +1,5 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -17,6 +18,12 @@ export const Modal: React.FC<ModalProps> = ({
   children,
   maxWidthClass = 'max-w-xl',
 }) => {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -33,27 +40,32 @@ export const Modal: React.FC<ModalProps> = ({
     };
   }, [isOpen, onClose]);
 
-  return (
+  if (!mounted) return null;
+
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-          {/* Backdrop */}
+        <div
+          className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4 overflow-y-auto pointer-events-auto"
+          onClick={onClose}
+        >
+          {/* Full-Screen Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={onClose}
-            className="fixed inset-0 bg-black/85 backdrop-blur-lg transition-opacity"
+            className="fixed inset-0 bg-black/95 backdrop-blur-2xl transition-opacity z-0 pointer-events-auto"
             aria-hidden="true"
           />
 
-          {/* Modal Panel Container */}
+          {/* Modal Panel Container — Stop Propagation ensures clicks inside modal work cleanly */}
           <motion.div
             initial={{ opacity: 0, scale: 0.96, y: 12 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 12 }}
             transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
-            className={`relative w-full ${maxWidthClass} glass-panel-glow rounded-3xl p-4 sm:p-6 md:p-7 shadow-2xl border border-[#b91c1c]/40 text-slate-100 z-10 my-auto max-h-[88vh] flex flex-col bg-[#07090e]`}
+            onClick={(e) => e.stopPropagation()}
+            className={`relative w-full ${maxWidthClass} bg-[#07090e] rounded-3xl p-4 sm:p-6 md:p-7 shadow-[0_0_80px_rgba(0,0,0,1)] border border-[#b91c1c]/60 text-slate-100 z-10 my-auto max-h-[88vh] flex flex-col pointer-events-auto`}
             role="dialog"
             aria-modal="true"
             aria-labelledby="modal-title"
@@ -64,21 +76,23 @@ export const Modal: React.FC<ModalProps> = ({
                 {title}
               </h3>
               <button
+                type="button"
                 onClick={onClose}
-                className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-[#1a0000] border border-slate-800 hover:border-[#b91c1c] transition-colors shrink-0"
+                className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-[#1a0000] border border-slate-800 hover:border-[#b91c1c] transition-colors shrink-0 cursor-pointer"
                 aria-label="Close modal"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Content Body with scrolling & safe mobile bottom padding */}
-            <div className="flex-1 overflow-y-auto pr-1 pb-16 sm:pb-2 space-y-4">
+            {/* Content Body */}
+            <div className="flex-1 overflow-y-auto pr-1 pb-4 space-y-4 pointer-events-auto">
               {children}
             </div>
           </motion.div>
         </div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 };

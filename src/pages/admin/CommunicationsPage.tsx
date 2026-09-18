@@ -473,7 +473,7 @@ export const CommunicationsPage: React.FC = () => {
 
             <div className="p-6 rounded-2xl bg-[#06080c] border border-slate-800 space-y-4 font-mono text-xs">
               <div className="border-b border-slate-800 pb-3 space-y-1">
-                <div className="text-slate-400">From: <strong className="text-white">TARAS 2K26 Admin &lt;no-reply@taras-2k26.web.app&gt;</strong></div>
+                <div className="text-slate-400">From: <strong className="text-white">TARAS 2K26 Admin &lt;taras2k26@gmail.com&gt;</strong></div>
                 <div className="text-slate-400">To: <strong className="text-white">Arun Kumar &lt;student1@gmail.com&gt;</strong></div>
                 <div className="text-slate-400">Subject: <strong className="text-[#b91c1c] font-bold">{previewSubject}</strong></div>
               </div>

@@ -6,7 +6,6 @@ import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
 import { Modal } from '../../components/common/Modal';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
-import { MOCK_ANNOUNCEMENTS } from '../../data/announcements';
 import {
   Radio,
   PlusCircle,
@@ -39,39 +38,30 @@ export const AnnouncementManagementPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
-  const fetchAnnouncements = async () => {
+  useEffect(() => {
     setLoading(true);
     setError(null);
-    try {
-      const data = await db.getCollection('announcements');
-      if (data.length > 0) {
-        setAnnouncements(data as unknown as AnnouncementItem[]);
-      } else {
-        // Seed from MOCK_ANNOUNCEMENTS
-        const seeded: AnnouncementItem[] = MOCK_ANNOUNCEMENTS.map((a) => ({
-          id: a.id,
-          title: a.title,
-          message: a.message,
-          priority: (a.priority || 'NORMAL') as any,
-          category: a.category || 'GENERAL',
-          authorRole: a.authorRole || 'TARAS Executive Committee',
-          timestamp: a.timestamp,
-        }));
-        setAnnouncements(seeded);
-        for (const item of seeded) {
-          await db.setDoc('announcements', item.id, item as unknown as Record<string, unknown>);
-        }
-      }
-    } catch (err: any) {
-      console.error('Error fetching announcements:', err);
-      setError(err.message || 'Failed to load announcements from Firestore.');
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  useEffect(() => {
-    fetchAnnouncements();
+    // Real-Time Firestore Subscription for Live Broadcast Dispatches
+    const unsubscribe = db.subscribeCollection('announcements', (liveDocs) => {
+      const formatted: AnnouncementItem[] = (liveDocs as any[]).map((d) => ({
+        id: d.id,
+        title: d.title || 'Official Broadcast',
+        message: d.message || '',
+        priority: (d.priority || 'NORMAL') as any,
+        category: d.category || 'GENERAL',
+        authorRole: d.authorRole || 'TARAS Desk',
+        timestamp: d.timestamp || d.createdAt || new Date().toISOString(),
+      }));
+
+      // Sort timestamp descending
+      formatted.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+      setAnnouncements(formatted);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const handleOpenCreate = () => {
@@ -117,7 +107,6 @@ export const AnnouncementManagementPage: React.FC = () => {
       setTimeout(() => {
         setSaveSuccess(false);
         setIsModalOpen(false);
-        fetchAnnouncements();
       }, 1200);
     } catch (err: any) {
       alert(err.message || 'Failed to save announcement');

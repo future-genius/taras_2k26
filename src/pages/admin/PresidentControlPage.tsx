@@ -30,9 +30,10 @@ import {
   Download,
 } from 'lucide-react';
 import { PresidentTeamOverview } from '../../components/president/PresidentTeamOverview';
+import { ParticipantDataExportConsole } from '../../components/export/ParticipantDataExportConsole';
 
 export const PresidentControlPage: React.FC = () => {
-  const { user } = useAuth();
+  const { user, participantProfile } = useAuth();
 
   const [profiles, setProfiles] = useState<ParticipantProfile[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
@@ -454,6 +455,37 @@ export const PresidentControlPage: React.FC = () => {
             <span>{error}</span>
           </div>
         )}
+
+        {/* ── PARTICIPANT DATA EXPORT CONSOLE ── */}
+        <ParticipantDataExportConsole
+          profile={
+            participantProfile || {
+              uid: user?.uid || 'president_console',
+              role: 'super_admin',
+              email: user?.email || 'president.taras2k26@gmail.com',
+              fullName: 'President Control',
+              participantId: 'PRESIDENT',
+              registrationNumber: 'PRESIDENT',
+              college: 'SRM Valliammai Engineering College',
+              department: 'ECE',
+              year: 'IV',
+              section: 'A',
+              phone: '0000000000',
+              registeredEvents: [],
+              teamIds: [],
+              venueCheckIn: true,
+              venueCheckInStatus: 'CHECKED_IN',
+              qrToken: '',
+              attendanceStatus: {},
+              shortlistStatus: {},
+              certificateStatus: 'READY',
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            }
+          }
+          title="President Participant Data Export"
+          subtitle="Generate complete authorized Excel and CSV exports from Cloud Firestore for symposium administration."
+        />
 
         {/* ── SECTION 1: ADMINISTRATIVE HIERARCHY METRICS ── */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">

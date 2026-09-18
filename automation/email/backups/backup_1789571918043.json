@@ -1,0 +1,37 @@
+{
+  "participants": [
+    {
+      "id": "lrzt2A5VnQUARktBQZht7z5tVih2",
+      "email": "president.taras2k26@gmail.com",
+      "createdAt": "2026-08-30T20:51:20.080Z",
+      "department": "ECE",
+      "attendanceStatus": {},
+      "college": "SRM Valliammai Engineering College",
+      "registeredEvents": [],
+      "participantId": "TARAS26-PRESIDENT-01",
+      "assignedEventIds": [],
+      "uid": "lrzt2A5VnQUARktBQZht7z5tVih2",
+      "role": "super_admin",
+      "fullName": "TARAS 2K26 President",
+      "teamIds": [],
+      "isPrimarySuperAdmin": true,
+      "registrationNumber": "PRESIDENT-ECE-01",
+      "qrToken": "QR-TARAS26-PRESIDENT-01",
+      "year": "IV",
+      "shortlistStatus": {},
+      "section": "1",
+      "phone": "+91 8637423676",
+      "certificateStatus": "NOT_ELIGIBLE",
+      "checkedInByStaffUid": null,
+      "venueCheckInTimestamp": null,
+      "certificateUrl": null,
+      "venueCheckIn": false,
+      "venueCheckInStatus": "NOT_CHECKED_IN",
+      "updatedAt": "2026-09-16T15:17:13.224Z"
+    }
+  ],
+  "registrations": [],
+  "teams": [],
+  "payment_proofs": [],
+  "utr_registry": []
+}

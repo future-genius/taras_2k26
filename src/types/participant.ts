@@ -19,10 +19,12 @@ export type ShortlistStatus = 'NOT_EVALUATED' | 'UNDER_EVALUATION' | 'SHORTLISTE
 
 export interface ParticipantProfile {
   uid: string;
+  userId?: string; // Backward compatibility alias for uid
   participantId: string; // e.g. TARAS26-89420194
   fullName: string;
   email: string;
   phone: string;
+  phoneNumber?: string; // Backward compatibility alias for phone
   college: string;
   department: string;
   year: 'I' | 'II' | 'III' | 'IV' | 'PG';
@@ -42,6 +44,7 @@ export interface ParticipantProfile {
   shortlistStatus: Record<string, ShortlistStatus>; // eventId -> ShortlistStatus
   certificateStatus: CertificateStatus;
   certificateUrl?: string;
+  mustChangePassword?: boolean;
   isDemo?: boolean; // Isolated demo participant indicator
   createdAt: string;
   updatedAt: string;

@@ -22,11 +22,11 @@ function doPost(e) {
     }
 
     var payload = JSON.parse(e.postData.contents);
-    var paymentProofId = payload.paymentProofId;
-    var fileName = payload.fileName || (paymentProofId + '.png');
-    var base64Data = payload.base64Data;
+    var paymentProofId = payload.paymentProofId || payload.requestId;
+    var fileName = payload.fileName || payload.originalFileName || (paymentProofId ? (paymentProofId + '.png') : 'payment_proof.png');
+    var base64Data = payload.base64Data || payload.fileData;
     var mimeType = payload.mimeType || 'image/png';
-    var teamName = payload.teamName || payload.teamId || 'UNNAMED_TEAM';
+    var teamName = payload.teamName || payload.teamId || payload.eventName || 'UNNAMED_TEAM';
     var year = payload.year || '2026';
     var month = payload.month || 'October';
     var date = payload.date || '10';
@@ -53,10 +53,17 @@ function doPost(e) {
       return responseJSON({
         success: true,
         alreadyExisted: true,
+        requestId: paymentProofId,
+        paymentProofId: paymentProofId,
         fileId: existingFile.getId(),
+        driveFileId: existingFile.getId(),
         folderId: teamFolder.getId(),
+        driveFolderId: teamFolder.getId(),
         driveUrl: existingFile.getUrl(),
-        path: 'TARAS 2K26/Payment Proofs/' + year + '/' + month + '/' + date + '/' + cleanTeamFolder + '/' + fileName
+        driveFileUrl: existingFile.getUrl(),
+        driveFileName: fileName,
+        path: 'TARAS 2K26/Payment Proofs/' + year + '/' + month + '/' + date + '/' + cleanTeamFolder + '/' + fileName,
+        drivePath: 'TARAS 2K26/Payment Proofs/' + year + '/' + month + '/' + date + '/' + cleanTeamFolder + '/' + fileName
       });
     }
 
@@ -79,10 +86,17 @@ function doPost(e) {
     return responseJSON({
       success: true,
       alreadyExisted: false,
+      requestId: paymentProofId,
+      paymentProofId: paymentProofId,
       fileId: file.getId(),
+      driveFileId: file.getId(),
       folderId: teamFolder.getId(),
+      driveFolderId: teamFolder.getId(),
       driveUrl: file.getUrl(),
-      path: 'TARAS 2K26/Payment Proofs/' + year + '/' + month + '/' + date + '/' + cleanTeamFolder + '/' + fileName
+      driveFileUrl: file.getUrl(),
+      driveFileName: fileName,
+      path: 'TARAS 2K26/Payment Proofs/' + year + '/' + month + '/' + date + '/' + cleanTeamFolder + '/' + fileName,
+      drivePath: 'TARAS 2K26/Payment Proofs/' + year + '/' + month + '/' + date + '/' + cleanTeamFolder + '/' + fileName
     });
 
   } catch (err) {

@@ -1,14 +1,19 @@
 /**
- * TARAS 2K26 — Dual-Storage Payment Proof & Metadata Service
+ * TARAS 2K26 — Payment Proof Storage Service
  *
- * Dedicated service for:
- * 1. Single Payment Proof ID Generation: PAY-TARAS-YYYYMMDD-HHMMSS-XXXX
- * 2. Single Authoritative Server/IST Timestamp generation (2026-10-10T14:35:22+05:30)
- * 3. Controlled Supabase Storage Upload: payment-proofs/2026/10/10/PAY-TARAS-20261010-143522-X7K9.png
- * 4. Automatic Google Drive Archival: TARAS 2K26/Payment Proofs/2026/October/10/TEAM-014_TechTitans/PAY-TARAS-*.png
- * 5. Atomic persistence of dual-storage references & metadata in Cloud Firestore
- * 6. Secure temporary signed URL retrieval for Registration Staff & Admin review
- * 7. Graceful failure recovery & Google Drive archive retries
+ * Orchestrates:
+ * 1. Unique Payment Proof ID generation (PAY-TARAS-YYYYMMDD-HHMMSS-XXXX)
+ * 2. Authoritative IST timestamp generation
+ * 3. Firebase Auth ID-token retrieval
+ * 4. Upload to Google Drive via Apps Script Web App
+ * 5. Atomic persistence of Drive metadata + payment status in Firestore
+ * 6. Reusable retry via the same paymentProofId (idempotency)
+ *
+ * NO Supabase Storage.
+ * NO Firestore Base64 image fallback.
+ * NO Firebase Storage.
+ *
+ * If Drive upload fails: surface the error, offer retry. Do NOT fake success.
  */
 
 import {
@@ -20,35 +25,51 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { auth, firestore } from '../config/firebase';
-import { getSupabaseClient, isSupabaseConfigured } from '../config/supabase';
-import { archivePaymentProofToGoogleDrive } from './googleDriveArchiveService';
+import {
+  uploadPaymentProofToDrive,
+  type DriveUploadResult,
+} from './googleDriveArchiveService';
 
-export const SUPABASE_PAYMENT_PROOF_BUCKET = 'payment-proofs';
+// ─────────────────────────────────────────────────────────────────────────────
+// TYPES
+// ─────────────────────────────────────────────────────────────────────────────
 
-export interface DualStoragePaymentProofMetadata {
+export interface DrivePaymentProofMetadata {
   paymentProofId: string;
-  provider: 'supabase' | 'firestore';
-  bucket: string;
-  path: string;
+  /** Always 'googledrive' for new uploads */
+  provider: 'googledrive' | 'firestore';
+  /** Drive folder path (e.g. "Payment Proofs/Paper-X-Verse External/...") */
+  drivePath: string;
+  /** Drive file ID */
+  driveFileId: string;
+  /** Drive web view URL */
+  driveFileUrl: string;
+  /** Sanitized filename in Drive */
+  driveFileName: string;
+  /** Drive folder ID */
+  driveFolderId: string;
+  /** Upload status */
+  driveUploadStatus: 'SUCCESS' | 'FAILED' | 'PENDING';
   fileSize: number;
   contentType: string;
-  uploadedAt: string;        // Authoritative ISO 8601 string with IST offset
-  uploadedAtIST: string;     // Formatted string: "10 October 2026, 02:35:22 PM IST"
+  /** ISO 8601 with IST offset */
+  uploadedAt: string;
+  /** Formatted: "10 October 2026, 02:35:22 PM IST" */
+  uploadedAtIST: string;
+  /** Drive URL used by Registration Dashboard to link to proof */
   signedUrl?: string;
-  supabasePath: string;
-  supabaseUploadStatus: 'SUCCESS' | 'FAILED';
-  googleDriveFileId?: string;
-  googleDriveFolderId?: string;
-  googleDrivePath?: string;
-  googleDriveUploadStatus: 'SUCCESS' | 'FAILED' | 'PENDING';
 }
 
-export interface SupabaseUploadProgressCallback {
+export interface DriveUploadProgressCallback {
   (percentage: number): void;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// TIMESTAMP & ID UTILITIES
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
- * Generate a single authoritative timestamp (ISO 8601 with +05:30 IST offset and formatted IST display)
+ * Generate a single authoritative IST timestamp.
  */
 export function generateAuthoritativeTimestamp(dateObj = new Date()): {
   isoIST: string;
@@ -58,7 +79,6 @@ export function generateAuthoritativeTimestamp(dateObj = new Date()): {
   dateStr: string;
   timeCompact: string;
 } {
-  // IST is UTC + 5 hours 30 minutes
   const utcTime = dateObj.getTime();
   const istOffsetMs = 5.5 * 60 * 60 * 1000;
   const istDate = new Date(utcTime + istOffsetMs);
@@ -74,7 +94,7 @@ export function generateAuthoritativeTimestamp(dateObj = new Date()): {
 
   const monthNames = [
     'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
+    'July', 'August', 'September', 'October', 'November', 'December',
   ];
   const monthName = monthNames[monthNum];
 
@@ -82,20 +102,15 @@ export function generateAuthoritativeTimestamp(dateObj = new Date()): {
   const hours12 = hours % 12 === 0 ? 12 : hours % 12;
   const hours12Str = String(hours12).padStart(2, '0');
 
-  // ISO 8601 with +05:30 offset
   const isoIST = `${year}-${monthStr}-${dateStr}T${String(hours).padStart(2, '0')}:${minutes}:${seconds}+05:30`;
-
-  // Display: "10 October 2026, 02:35:22 PM IST"
   const formattedIST = `${dateStr} ${monthName} ${year}, ${hours12Str}:${minutes}:${seconds} ${period} IST`;
-
-  // Compact string for ID: "20261010-143522"
   const timeCompact = `${year}${monthStr}${dateStr}-${String(hours).padStart(2, '0')}${minutes}${seconds}`;
 
   return { isoIST, formattedIST, year, monthName, dateStr, timeCompact };
 }
 
 /**
- * Generate ONE unique Payment Proof ID: PAY-TARAS-YYYYMMDD-HHMMSS-XXXX
+ * Generate a unique Payment Proof ID: PAY-TARAS-YYYYMMDD-HHMMSS-XXXX
  */
 export function generatePaymentProofId(timestampCompact?: string): string {
   const nonceBytes = new Uint8Array(2);
@@ -105,43 +120,44 @@ export function generatePaymentProofId(timestampCompact?: string): string {
     nonceBytes[0] = Math.floor(Math.random() * 256);
     nonceBytes[1] = Math.floor(Math.random() * 256);
   }
-  const nonce = Array.from(nonceBytes, (b) => b.toString(16).padStart(2, '0')).join('').toUpperCase();
-
+  const nonce = Array.from(nonceBytes, (b) => b.toString(16).padStart(2, '0'))
+    .join('')
+    .toUpperCase();
   const timePart = timestampCompact || generateAuthoritativeTimestamp().timeCompact;
   return `PAY-TARAS-${timePart}-${nonce}`;
 }
 
-/**
- * Generate controlled storage path for Supabase Storage
- * Format: payment-proofs/2026/10/10/PAY-TARAS-20261010-143522-X7K9.png
- */
-export function getPaymentProofStoragePath(
-  paymentProofId: string,
-  year: string,
-  monthStr: string,
-  dateStr: string,
-  fileExtension = 'png'
-): string {
-  const cleanExt = fileExtension.toLowerCase().replace(/[^a-z0-9]/g, '');
-  return `${year}/${monthStr}/${dateStr}/${paymentProofId}.${cleanExt || 'png'}`;
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// PRIMARY UPLOAD
+// ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Upload payment screenshot to Supabase Storage and automatically archive to Google Drive.
- * Generates ONE Payment Proof ID and ONE Authoritative Timestamp.
+ * Upload a payment proof image to Google Drive and return Drive metadata.
+ *
+ * Steps:
+ *   1. Auth check
+ *   2. Ownership check (Firestore)
+ *   3. Derive paymentProofId + IST timestamp
+ *   4. Get short-lived Firebase ID token
+ *   5. Upload to Google Drive via Apps Script
+ *   6. Return Drive metadata (does NOT write to Firestore — caller does that)
+ *
+ * If Drive upload fails, throws an Error so the UI can show retry.
+ * Does NOT fall back to Firestore base64 storage.
  */
-export async function uploadPaymentProofToSupabase(
+export async function uploadPaymentProofToGoogleDrive(
   registrationId: string,
   file: File | Blob,
-  onProgress?: SupabaseUploadProgressCallback
-): Promise<DualStoragePaymentProofMetadata> {
+  eventName?: string,
+  onProgress?: DriveUploadProgressCallback
+): Promise<DrivePaymentProofMetadata> {
   const currentUser = auth.currentUser;
   if (!currentUser) {
     throw new Error('Authentication required: You must be logged in to upload payment proofs.');
   }
 
   if (!registrationId) {
-    throw new Error('Registration ID is required for storage path resolution.');
+    throw new Error('Registration ID is required for payment proof upload.');
   }
 
   if (!file || file.size === 0) {
@@ -156,274 +172,185 @@ export async function uploadPaymentProofToSupabase(
   }
   const regData = regSnap.data();
   if (regData.uid !== currentUser.uid) {
-    throw new Error('Unauthorized: You do not have permission to upload payment proof for this registration.');
+    throw new Error(
+      'Unauthorized: You do not have permission to upload payment proof for this registration.'
+    );
   }
   if (regData.status === 'CONFIRMED' || regData.paymentStatus === 'VERIFIED') {
     throw new Error('Payment for this registration has already been verified.');
   }
 
-  // 2. Derive single authoritative timestamp and Payment Proof ID
+  if (onProgress) onProgress(10);
+
+  // 2. Derive single authoritative timestamp + Payment Proof ID
   const timeInfo = generateAuthoritativeTimestamp();
   const paymentProofId = generatePaymentProofId(timeInfo.timeCompact);
   const uploadedAt = timeInfo.isoIST;
   const uploadedAtIST = timeInfo.formattedIST;
 
-  const rawExt = file instanceof File ? file.name.split('.').pop() || 'png' : 'png';
+  const rawExt =
+    file instanceof File ? file.name.split('.').pop() || 'webp' : 'webp';
   const cleanExt = rawExt.toLowerCase().includes('png')
     ? 'png'
     : rawExt.toLowerCase().includes('jpg') || rawExt.toLowerCase().includes('jpeg')
-      ? 'jpeg'
-      : rawExt.toLowerCase().includes('pdf')
-        ? 'pdf'
-        : 'webp';
+    ? 'jpeg'
+    : 'webp';
+  const contentType =
+    file.type ||
+    (cleanExt === 'png' ? 'image/png' : cleanExt === 'jpeg' ? 'image/jpeg' : 'image/webp');
 
-  const contentType = file.type || (cleanExt === 'pdf' ? 'application/pdf' : cleanExt === 'png' ? 'image/png' : 'image/jpeg');
+  if (onProgress) onProgress(20);
 
-  const monthNum = String(new Date().getMonth() + 1).padStart(2, '0');
-  const storagePath = getPaymentProofStoragePath(paymentProofId, timeInfo.year, monthNum, timeInfo.dateStr, cleanExt);
-
-  if (onProgress) onProgress(15);
-
-  let simulatedProgress = 20;
-  const progressTimer = setInterval(() => {
-    if (onProgress && simulatedProgress < 75) {
-      simulatedProgress += 10;
-      onProgress(simulatedProgress);
-    }
-  }, 200);
-
-  // 3. Fallback: Save screenshot as base64 in Firestore if Supabase Storage is unconfigured
-  const uploadToFirestoreFallback = async (): Promise<DualStoragePaymentProofMetadata> => {
-    clearInterval(progressTimer);
-    if (onProgress) onProgress(80);
-
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = () => reject(new Error('Failed to encode image data.'));
-      reader.readAsDataURL(file);
-    });
-
-    const proofDocRef = doc(firestore, 'payment_proofs', registrationId);
-    await setDoc(
-      proofDocRef,
-      {
-        registrationId,
-        paymentProofId,
-        uid: currentUser.uid,
-        dataUrl,
-        fileSize: file.size,
-        contentType,
-        uploadedAt,
-        uploadedAtIST,
-        updatedAt: serverTimestamp(),
-      },
-      { merge: true }
-    );
-
-    // Attempt Google Drive Archive
-    if (onProgress) onProgress(90);
-    const driveResult = await archivePaymentProofToGoogleDrive({
-      paymentProofId,
-      file,
-      downloadUrl: dataUrl,
-      teamId: regData.teamId,
-      teamName: regData.teamName,
-      uploadedAt,
-      uploadedAtIST,
-    });
-
-    if (onProgress) onProgress(100);
-
-    return {
-      paymentProofId,
-      provider: 'firestore',
-      bucket: 'firestore',
-      path: `payment_proofs/${registrationId}`,
-      fileSize: file.size,
-      contentType,
-      uploadedAt,
-      uploadedAtIST,
-      signedUrl: dataUrl,
-      supabasePath: `payment_proofs/${registrationId}`,
-      supabaseUploadStatus: 'SUCCESS',
-      googleDriveFileId: driveResult.fileId || '',
-      googleDriveFolderId: driveResult.folderId || '',
-      googleDrivePath: driveResult.path || '',
-      googleDriveUploadStatus: driveResult.success ? 'SUCCESS' : 'FAILED',
-    };
-  };
-
-  if (!isSupabaseConfigured) {
-    return await uploadToFirestoreFallback();
-  }
-
+  // 3. Get short-lived Firebase ID token for server-side validation
+  let firebaseIdToken: string;
   try {
-    // 4. Primary: Upload to Supabase Storage
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase.storage
-      .from(SUPABASE_PAYMENT_PROOF_BUCKET)
-      .upload(storagePath, file, {
-        contentType,
-        upsert: false,
-        cacheControl: '3600',
-      });
-
-    clearInterval(progressTimer);
-
-    if (error) {
-      console.warn('Supabase Storage returned error, executing fallback:', error.message);
-      return await uploadToFirestoreFallback();
-    }
-
-    if (onProgress) onProgress(80);
-
-    const finalPath = data?.path || storagePath;
-
-    // Generate signed URL for immediate view
-    let signedUrl = '';
-    try {
-      const { data: signedData } = await supabase.storage
-        .from(SUPABASE_PAYMENT_PROOF_BUCKET)
-        .createSignedUrl(finalPath, 300);
-      if (signedData?.signedUrl) {
-        signedUrl = signedData.signedUrl;
-      }
-    } catch (_) {
-      // ignore
-    }
-
-    // 5. Secondary: Archive same proof to Google Drive
-    if (onProgress) onProgress(90);
-    const driveResult = await archivePaymentProofToGoogleDrive({
-      paymentProofId,
-      file,
-      downloadUrl: signedUrl,
-      teamId: regData.teamId,
-      teamName: regData.teamName,
-      uploadedAt,
-      uploadedAtIST,
-    });
-
-    if (onProgress) onProgress(100);
-
-    return {
-      paymentProofId,
-      provider: 'supabase',
-      bucket: SUPABASE_PAYMENT_PROOF_BUCKET,
-      path: finalPath,
-      fileSize: file.size,
-      contentType,
-      uploadedAt,
-      uploadedAtIST,
-      signedUrl,
-      supabasePath: finalPath,
-      supabaseUploadStatus: 'SUCCESS',
-      googleDriveFileId: driveResult.fileId || '',
-      googleDriveFolderId: driveResult.folderId || '',
-      googleDrivePath: driveResult.path || '',
-      googleDriveUploadStatus: driveResult.success ? 'SUCCESS' : 'FAILED',
-    };
-  } catch (err: any) {
-    clearInterval(progressTimer);
-    console.warn('Supabase Storage exception, using fallback:', err.message);
-    try {
-      return await uploadToFirestoreFallback();
-    } catch (fallbackErr: any) {
-      throw new Error(
-        fallbackErr.message ||
-          'Payment proof upload failed due to a network interruption. Please retry.'
-      );
-    }
+    firebaseIdToken = await currentUser.getIdToken();
+  } catch (tokenErr: any) {
+    throw new Error(
+      'Failed to obtain authentication token. Please sign in again and retry.'
+    );
   }
+
+  if (onProgress) onProgress(30);
+
+  // 4. Encode file to base64 for transport
+  const fileData = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const dataUrl = reader.result as string;
+      resolve(dataUrl.split(',')[1] || dataUrl);
+    };
+    reader.onerror = () =>
+      reject(new Error('Failed to encode payment proof image for upload.'));
+    reader.readAsDataURL(file);
+  });
+
+  if (onProgress) onProgress(40);
+
+  // 5. Upload to Google Drive via Apps Script Web App
+  const driveResult: DriveUploadResult = await uploadPaymentProofToDrive(
+    {
+      requestId: paymentProofId,
+      firebaseIdToken,
+      registrationId,
+      teamId: regData.teamId || '',
+      eventName: eventName || regData.eventName || '',
+      transactionId: '', // provided later by the payment form
+      bankName: '',      // provided later by the payment form
+      transactionDate: '', // provided later by the payment form
+      originalFileName:
+        file instanceof File ? file.name : `payment_proof.${cleanExt}`,
+      mimeType: contentType,
+      fileSize: file.size,
+      fileData,
+      uploadedAt,
+      uploadedAtIST,
+    }
+  );
+
+  if (onProgress) onProgress(90);
+
+  if (!driveResult.success) {
+    throw new Error(
+      driveResult.error ||
+        'Google Drive upload failed. Please check your internet connection and retry.'
+    );
+  }
+
+  if (onProgress) onProgress(100);
+
+  return {
+    paymentProofId,
+    provider: 'googledrive',
+    drivePath: driveResult.drivePath || '',
+    driveFileId: driveResult.driveFileId || '',
+    driveFileUrl: driveResult.driveFileUrl || '',
+    driveFileName: driveResult.driveFileName || '',
+    driveFolderId: driveResult.driveFolderId || '',
+    driveUploadStatus: 'SUCCESS',
+    fileSize: file.size,
+    contentType,
+    uploadedAt,
+    uploadedAtIST,
+    signedUrl: driveResult.driveFileUrl || '',
+  };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PAYMENT PROOF URL RESOLUTION
+// ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Generate a short-lived temporary signed URL to view a private payment proof.
+ * Resolve a payment proof view URL for Registration Dashboard display.
+ *
+ * New Drive records: returns driveFileUrl directly from Firestore.
+ * Legacy records (Firestore base64 fallback): reads dataUrl from payment_proofs/<regId>.
+ * Returns null if no proof is available.
  */
-export async function getPaymentProofSignedViewUrl(
-  storagePath: string,
-  expiresInSeconds = 300
-): Promise<string> {
-  if (storagePath && storagePath.startsWith('payment_proofs/')) {
-    const parts = storagePath.split('/');
-    const regId = parts[1];
-    if (regId) {
-      try {
-        const proofDoc = await getDoc(doc(firestore, 'payment_proofs', regId));
-        if (proofDoc.exists() && proofDoc.data()?.dataUrl) {
-          return proofDoc.data().dataUrl;
-        }
-      } catch (err) {
-        console.warn('Could not read payment_proofs doc:', err);
-      }
-    }
+export async function getPaymentProofViewUrl(
+  registration: Record<string, any>
+): Promise<string | null> {
+  // 1. New Drive-backed records: use stored driveFileUrl
+  const driveUrl =
+    registration?.paymentProof?.driveFileUrl ||
+    registration?.driveFileUrl ||
+    registration?.paymentScreenshotUrl ||
+    '';
+
+  if (driveUrl && driveUrl.startsWith('https://')) {
+    return driveUrl;
   }
 
-  if (!isSupabaseConfigured) {
-    if (storagePath && storagePath.includes('/')) {
-      const segments = storagePath.split('/');
-      const possibleRegId = segments.find((s) => s.startsWith('TARAS26-'));
-      if (possibleRegId) {
-        const proofDoc = await getDoc(doc(firestore, 'payment_proofs', possibleRegId));
-        if (proofDoc.exists() && proofDoc.data()?.dataUrl) {
-          return proofDoc.data().dataUrl;
-        }
-      }
-    }
-    throw new Error('Supabase Storage is not configured.');
-  }
-
-  try {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase.storage
-      .from(SUPABASE_PAYMENT_PROOF_BUCKET)
-      .createSignedUrl(storagePath, expiresInSeconds);
-
-    if (error || !data?.signedUrl) {
-      const segments = storagePath.split('/');
-      const possibleRegId = segments.find((s) => s.startsWith('TARAS26-'));
-      if (possibleRegId) {
-        const proofDoc = await getDoc(doc(firestore, 'payment_proofs', possibleRegId));
-        if (proofDoc.exists() && proofDoc.data()?.dataUrl) {
-          return proofDoc.data().dataUrl;
-        }
-      }
-      throw new Error(error?.message || 'Unable to load payment proof URL.');
-    }
-
-    return data.signedUrl;
-  } catch (supabaseErr: any) {
-    const segments = storagePath.split('/');
-    const possibleRegId = segments.find((s) => s.startsWith('TARAS26-'));
-    if (possibleRegId) {
-      const proofDoc = await getDoc(doc(firestore, 'payment_proofs', possibleRegId));
+  // 2. Legacy Firestore base64 fallback (read-only; not written for new uploads)
+  const regId = registration?.registrationId;
+  if (regId) {
+    try {
+      const proofDoc = await getDoc(doc(firestore, 'payment_proofs', regId));
       if (proofDoc.exists() && proofDoc.data()?.dataUrl) {
-        return proofDoc.data().dataUrl;
+        return proofDoc.data().dataUrl as string;
       }
+    } catch (err) {
+      console.warn('Could not read legacy payment_proofs doc:', err);
     }
-    throw supabaseErr;
   }
+
+  return null;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FIRESTORE PERSISTENCE
+// ─────────────────────────────────────────────────────────────────────────────
 
 export interface SavePaymentSubmissionParams {
   registrationId: string;
   utrNumber: string;
-  proofMetadata: DualStoragePaymentProofMetadata;
+  bankName?: string;
+  transactionDate?: string;
+  proofMetadata: DrivePaymentProofMetadata;
 }
 
 /**
- * Atomically persist payment submission and dual-storage metadata in Firestore.
+ * Atomically persist payment submission and Drive metadata in Firestore.
+ *
+ * UTR duplicate check is enforced via a Firestore transaction.
+ * Does NOT change paymentStatus to VERIFIED — that remains the Registration Team's job.
  */
 export async function savePaymentProofSubmissionToFirestore({
   registrationId,
   utrNumber,
+  bankName = '',
+  transactionDate = '',
   proofMetadata,
 }: SavePaymentSubmissionParams): Promise<void> {
   const trimmedUtr = utrNumber.trim();
   if (!trimmedUtr) throw new Error('UTR / Transaction ID is required.');
-  if (!proofMetadata?.path) {
-    throw new Error('Payment screenshot storage path is missing.');
+  const trimmedBankName = bankName.trim();
+  if (!trimmedBankName) throw new Error('Bank Name is required.');
+  const trimmedTransactionDate = transactionDate.trim();
+  if (!trimmedTransactionDate) throw new Error('Transaction Date is required.');
+
+  if (!proofMetadata?.driveFileId && !proofMetadata?.drivePath) {
+    throw new Error('Drive upload metadata is missing. Please retry the upload.');
   }
 
   const normalizedUtr = trimmedUtr.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -459,6 +386,8 @@ export async function savePaymentProofSubmissionToFirestore({
       utrRef,
       {
         utrNumber: trimmedUtr,
+        bankName: trimmedBankName,
+        transactionDate: trimmedTransactionDate,
         normalizedUtr,
         registrationId,
         paymentProofId: proofMetadata.paymentProofId,
@@ -471,34 +400,35 @@ export async function savePaymentProofSubmissionToFirestore({
     transaction.update(regRef, {
       paymentProofId: proofMetadata.paymentProofId,
       utrNumber: trimmedUtr,
+      bankName: trimmedBankName,
+      transactionDate: trimmedTransactionDate,
       paymentProof: {
         paymentProofId: proofMetadata.paymentProofId,
-        provider: proofMetadata.provider,
-        bucket: proofMetadata.bucket,
-        path: proofMetadata.path,
+        provider: proofMetadata.provider, // 'googledrive'
+        driveFileId: proofMetadata.driveFileId,
+        driveFileUrl: proofMetadata.driveFileUrl,
+        driveFileName: proofMetadata.driveFileName,
+        driveFolderId: proofMetadata.driveFolderId,
+        drivePath: proofMetadata.drivePath,
+        driveUploadStatus: proofMetadata.driveUploadStatus,
+        bankName: trimmedBankName,
+        transactionDate: trimmedTransactionDate,
         fileSize: proofMetadata.fileSize,
         contentType: proofMetadata.contentType,
         uploadedAt: proofMetadata.uploadedAt,
         uploadedAtIST: proofMetadata.uploadedAtIST,
-        supabasePath: proofMetadata.supabasePath,
-        supabaseUploadStatus: proofMetadata.supabaseUploadStatus,
-        googleDriveFileId: proofMetadata.googleDriveFileId || '',
-        googleDriveFolderId: proofMetadata.googleDriveFolderId || '',
-        googleDrivePath: proofMetadata.googleDrivePath || '',
-        googleDriveUploadStatus: proofMetadata.googleDriveUploadStatus,
       },
-      paymentScreenshotUrl: proofMetadata.signedUrl || '',
-      paymentScreenshotPath: proofMetadata.path,
+      // Top-level convenience fields for dashboards
+      paymentScreenshotUrl: proofMetadata.driveFileUrl,
+      paymentScreenshotPath: proofMetadata.drivePath,
       paymentScreenshotSize: proofMetadata.fileSize,
       paymentScreenshotContentType: proofMetadata.contentType,
+      googleDriveFileId: proofMetadata.driveFileId,
+      googleDriveFolderId: proofMetadata.driveFolderId,
+      googleDrivePath: proofMetadata.drivePath,
+      googleDriveUploadStatus: proofMetadata.driveUploadStatus,
       uploadedAt: proofMetadata.uploadedAt,
       uploadedAtIST: proofMetadata.uploadedAtIST,
-      supabasePath: proofMetadata.supabasePath,
-      supabaseUploadStatus: proofMetadata.supabaseUploadStatus,
-      googleDriveFileId: proofMetadata.googleDriveFileId || '',
-      googleDriveFolderId: proofMetadata.googleDriveFolderId || '',
-      googleDrivePath: proofMetadata.googleDrivePath || '',
-      googleDriveUploadStatus: proofMetadata.googleDriveUploadStatus,
       paymentSubmittedAt: proofMetadata.uploadedAt,
       paymentStatus: 'PENDING',
       status: 'PAYMENT_VERIFICATION_PENDING',
@@ -507,7 +437,7 @@ export async function savePaymentProofSubmissionToFirestore({
     });
   });
 
-  // Audit log entry
+  // Audit log
   try {
     const auditRef = doc(collection(firestore, 'audit_logs'));
     await setDoc(auditRef, {
@@ -515,106 +445,37 @@ export async function savePaymentProofSubmissionToFirestore({
       paymentProofId: proofMetadata.paymentProofId,
       registrationId,
       utrNumber: trimmedUtr,
+      bankName: trimmedBankName,
+      transactionDate: trimmedTransactionDate,
       provider: proofMetadata.provider,
-      supabasePath: proofMetadata.supabasePath,
-      googleDriveFileId: proofMetadata.googleDriveFileId || '',
-      googleDriveUploadStatus: proofMetadata.googleDriveUploadStatus,
+      driveFileId: proofMetadata.driveFileId,
+      drivePath: proofMetadata.drivePath,
+      driveUploadStatus: proofMetadata.driveUploadStatus,
       fileSize: proofMetadata.fileSize,
       possibleDuplicate: false,
       timestamp: serverTimestamp(),
     });
   } catch (auditErr) {
-    console.warn('Audit log write error:', auditErr);
+    console.warn('Audit log write error (non-fatal):', auditErr);
   }
 }
 
 /**
  * Resubmit payment proof following administrative rejection.
+ * Reuses the same Firestore transaction logic.
  */
 export async function resubmitPaymentProofToFirestore({
   registrationId,
   utrNumber,
+  bankName,
+  transactionDate,
   proofMetadata,
 }: SavePaymentSubmissionParams): Promise<void> {
   await savePaymentProofSubmissionToFirestore({
     registrationId,
     utrNumber,
+    bankName,
+    transactionDate,
     proofMetadata,
   });
-}
-
-/**
- * Retry Google Drive archival if initial drive upload failed or was pending
- */
-export async function retryGoogleDriveArchiveForRegistration(
-  registrationId: string,
-  file?: File | Blob
-): Promise<boolean> {
-  const regRef = doc(firestore, 'registrations', registrationId);
-  const regSnap = await getDoc(regRef);
-
-  if (!regSnap.exists()) {
-    throw new Error('Registration record not found.');
-  }
-
-  const regData = regSnap.data();
-  const paymentProofId = regData.paymentProofId || regData.paymentProof?.paymentProofId;
-
-  if (!paymentProofId) {
-    throw new Error('Payment Proof ID is missing for this registration.');
-  }
-
-  let viewUrl = regData.paymentScreenshotUrl || '';
-  if (!viewUrl && regData.paymentScreenshotPath) {
-    try {
-      viewUrl = await getPaymentProofSignedViewUrl(regData.paymentScreenshotPath);
-    } catch (_) {}
-  }
-
-  const result = await archivePaymentProofToGoogleDrive({
-    paymentProofId,
-    file,
-    downloadUrl: viewUrl,
-    teamId: regData.teamId,
-    teamName: regData.teamName,
-    uploadedAt: regData.uploadedAt || new Date().toISOString(),
-    uploadedAtIST: regData.uploadedAtIST || generateAuthoritativeTimestamp().formattedIST,
-  });
-
-  if (result.success) {
-    await setDoc(
-      regRef,
-      {
-        googleDriveFileId: result.fileId || '',
-        googleDriveFolderId: result.folderId || '',
-        googleDrivePath: result.path || '',
-        googleDriveUploadStatus: 'SUCCESS',
-        paymentProof: {
-          ...regData.paymentProof,
-          googleDriveFileId: result.fileId || '',
-          googleDriveFolderId: result.folderId || '',
-          googleDrivePath: result.path || '',
-          googleDriveUploadStatus: 'SUCCESS',
-        },
-        updatedAt: serverTimestamp(),
-      },
-      { merge: true }
-    );
-
-    try {
-      const auditRef = doc(collection(firestore, 'audit_logs'));
-      await setDoc(auditRef, {
-        action: 'GOOGLE_DRIVE_ARCHIVE_RETRIED_SUCCESS',
-        paymentProofId,
-        registrationId,
-        googleDriveFileId: result.fileId || '',
-        googleDrivePath: result.path || '',
-        timestamp: serverTimestamp(),
-      });
-    } catch (_) {}
-
-    return true;
-  }
-
-  return false;
 }

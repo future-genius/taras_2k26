@@ -8,7 +8,7 @@ import { generateCountdownReminderEmail, CountdownTrigger } from './templates/co
 const EVENT_DATE_IST = '2026-10-10'; // Official TARAS 2K26 Event Date
 const VENUE_NAME = 'SRM Valliammai Engineering College, Chennai';
 const DEFAULT_DAILY_LIMIT = 250;
-const DEFAULT_SENDER_EMAIL = 'taras2k26@valliammai.edu.in';
+const DEFAULT_SENDER_EMAIL = 'taras2k26@gmail.com';
 const DEFAULT_SENDER_NAME = 'TARAS 2K26 Team';
 const TIMEZONE = 'Asia/Kolkata';
 

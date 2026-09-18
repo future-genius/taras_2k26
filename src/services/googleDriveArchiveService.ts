@@ -1,152 +1,191 @@
 /**
- * TARAS 2K26 — Google Drive Archive Service
+ * TARAS 2K26 — Google Drive Payment Proof Upload Service
  *
- * Automates human-accessible Google Drive archiving of payment proof screenshots.
+ * PRIMARY storage provider for payment-proof screenshots.
  *
- * Required Google Drive Folder Hierarchy:
- * TARAS 2K26
- * └── Payment Proofs
- *     └── 2026
- *         └── October
- *             └── 10
- *                 └── TEAM-014_TechTitans
- *                     └── PAY-TARAS-20261010-143522-X7K9.png
+ * Architecture:
+ *   Compressed image (base64)
+ *     → Firebase ID token (short-lived)
+ *     → Google Apps Script Web App (VITE_GOOGLE_DRIVE_WEBAPP_URL)
+ *     → Google Drive (TARAS 2K26 / Payment Proofs / <event> / <file>)
  *
- * Safe Architecture:
- * - Uses configured server-side endpoint / Google Apps Script WebApp (`VITE_GOOGLE_DRIVE_WEBAPP_URL`).
- * - Never exposes private keys or credentials in client bundles.
- * - Idempotent lookup & upload (prevents duplicate folders or files).
- * - Partial failure resilient: returns failure state if Drive is unconfigured or times out,
- *   preserving application-side Supabase storage and enabling secure retry.
+ * Security:
+ *   - No Supabase. No service-account keys in the frontend.
+ *   - The Apps Script validates the Firebase ID token server-side.
+ *   - The Apps Script derives the correct Drive folder from the validated event.
+ *   - The browser never controls the Drive folder ID or path.
+ *
+ * Idempotency:
+ *   - requestId = paymentProofId is enforced by the Apps Script (PropertiesService).
+ *   - Duplicate requests return the existing Drive file metadata.
  */
 
-export interface GoogleDriveArchiveParams {
-  paymentProofId: string;
-  file?: File | Blob;
-  downloadUrl?: string;
+export interface DriveUploadParams {
+  /** Idempotency key — always equals paymentProofId */
+  requestId: string;
+  /** Short-lived Firebase ID token for server-side auth validation */
+  firebaseIdToken: string;
+  /** Firestore registration document ID */
+  registrationId: string;
+  /** Optional team ID */
   teamId?: string;
-  teamName?: string;
-  uploadedAt: string;
+  /** Display name of the TARAS event (used for Drive folder routing) */
+  eventName?: string;
+  /** UTR / Transaction ID entered by the participant */
+  transactionId?: string;
+  /** Bank name entered by the participant */
+  bankName?: string;
+  /** Transaction date (ISO string or display string) */
+  transactionDate?: string;
+  /** Original filename (sanitized server-side; do not trust as final name) */
+  originalFileName?: string;
+  /** MIME type of the compressed image (client hint; server validates) */
+  mimeType: string;
+  /** Size in bytes of the compressed image (client hint; server validates) */
+  fileSize: number;
+  /** Base64-encoded compressed image data (NO data: prefix) */
+  fileData: string;
+  /** IST timestamp string */
   uploadedAtIST: string;
+  /** ISO timestamp string */
+  uploadedAt: string;
 }
 
-export interface GoogleDriveArchiveResult {
+export interface DriveUploadResult {
   success: boolean;
+  /** Idempotency key echoed back */
+  requestId?: string;
+  /** Drive file ID */
+  driveFileId?: string;
+  /** Drive web view URL */
+  driveFileUrl?: string;
+  /** Final sanitized filename in Drive */
+  driveFileName?: string;
+  /** Drive folder ID */
+  driveFolderId?: string;
+  /** Human-readable Drive folder path */
+  drivePath?: string;
+  /** Whether this was a duplicate request (file already existed) */
   alreadyExisted?: boolean;
-  fileId?: string;
-  folderId?: string;
-  driveUrl?: string;
-  path?: string;
+  /** Error code for failed requests */
+  errorCode?: string;
+  /** Human-readable error message */
   error?: string;
 }
 
-const MONTH_NAMES = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December'
-];
-
 /**
- * Format date segments from timestamp for Google Drive folder hierarchy
- */
-export function getDriveFolderPathSegments(timestampIsoOrOffset: string): {
-  year: string;
-  month: string;
-  date: string;
-} {
-  const d = new Date(timestampIsoOrOffset);
-  // Fallback to current date if invalid
-  const validDate = isNaN(d.getTime()) ? new Date() : d;
-
-  const year = String(validDate.getFullYear());
-  const month = MONTH_NAMES[validDate.getMonth()] || 'October';
-  const date = String(validDate.getDate()).padStart(2, '0');
-
-  return { year, month, date };
-}
-
-/**
- * Convert Blob/File to Base64 string safely
+ * Convert Blob/File to raw Base64 string (no data: URI prefix)
  */
 async function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onloadend = () => {
       const dataUrl = reader.result as string;
+      // Strip the "data:<mime>;base64," prefix — Apps Script expects raw base64
       const base64 = dataUrl.split(',')[1] || dataUrl;
       resolve(base64);
     };
-    reader.onerror = () => reject(new Error('Failed to read payment proof image for Drive archive.'));
+    reader.onerror = () =>
+      reject(new Error('Failed to encode payment proof image for upload.'));
     reader.readAsDataURL(blob);
   });
 }
 
 /**
- * Archive payment proof screenshot to Google Drive
+ * Upload a payment-proof image to Google Drive via the Apps Script Web App.
+ *
+ * This is the PRIMARY (and only) upload path. There is no Supabase fallback.
+ * If the upload fails, the caller should surface the error and offer a retry.
  */
-export async function archivePaymentProofToGoogleDrive({
-  paymentProofId,
-  file,
-  downloadUrl,
-  teamId,
-  teamName,
-  uploadedAt,
-  uploadedAtIST,
-}: GoogleDriveArchiveParams): Promise<GoogleDriveArchiveResult> {
+export async function uploadPaymentProofToDrive(
+  params: DriveUploadParams,
+  file?: File | Blob
+): Promise<DriveUploadResult> {
   const webAppUrl = import.meta.env.VITE_GOOGLE_DRIVE_WEBAPP_URL || '';
 
-  const { year, month, date } = getDriveFolderPathSegments(uploadedAt);
-  const cleanTeamName = (teamName || teamId || 'INDIVIDUAL_PARTICIPANT')
-    .trim()
-    .replace(/[^a-zA-Z0-9_-]/g, '_');
-
-  const fileExt = file instanceof File
-    ? file.name.split('.').pop()?.toLowerCase() || 'png'
-    : 'png';
-
-  const fileName = `${paymentProofId}.${fileExt}`;
-  const targetDrivePath = `TARAS 2K26/Payment Proofs/${year}/${month}/${date}/${cleanTeamName}/${fileName}`;
-
-  // If no Web App URL is configured, log warning and return graceful PENDING/UNCONFIGURED status
   if (!webAppUrl || webAppUrl.includes('your-google-script-url')) {
-    console.warn(
-      'Google Drive WebApp URL (VITE_GOOGLE_DRIVE_WEBAPP_URL) is not set. Google Drive archive status set to PENDING.'
+    console.error(
+      'TARAS 2K26: VITE_GOOGLE_DRIVE_WEBAPP_URL is not configured. Payment-proof upload aborted.'
     );
     return {
       success: false,
-      error: 'Google Drive Archival Endpoint not configured. Supabase storage remains intact.',
-      path: targetDrivePath,
+      errorCode: 'DRIVE_NOT_CONFIGURED',
+      error:
+        'Google Drive upload endpoint is not configured. Please contact the TARAS administrator.',
+      requestId: params.requestId,
     };
   }
 
-  try {
-    let base64Data = '';
-    if (file) {
-      base64Data = await blobToBase64(file);
+  // Encode image to base64 if a file/blob is provided
+  let fileData = params.fileData;
+  if (!fileData && file) {
+    try {
+      fileData = await blobToBase64(file);
+    } catch (encodeErr: any) {
+      return {
+        success: false,
+        errorCode: 'ENCODE_FAILED',
+        error: encodeErr.message || 'Failed to encode payment proof image.',
+        requestId: params.requestId,
+      };
     }
+  }
 
-    const payload = {
-      paymentProofId,
-      fileName,
-      mimeType: file?.type || 'image/png',
-      base64Data,
-      downloadUrl,
-      teamId: teamId || '',
-      teamName: cleanTeamName,
-      year,
-      month,
-      date,
-      uploadedAt,
-      uploadedAtIST,
+  if (!fileData) {
+    return {
+      success: false,
+      errorCode: 'EMPTY_FILE',
+      error: 'No image data to upload.',
+      requestId: params.requestId,
     };
+  }
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s timeout
+  // Derive date components for folder organization if needed
+  const dateObj = new Date(params.uploadedAt || Date.now());
+  const year = String(dateObj.getFullYear());
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+  ];
+  const month = monthNames[dateObj.getMonth()];
+  const date = String(dateObj.getDate()).padStart(2, '0');
 
+  const payload = {
+    action: 'uploadPaymentProof',
+    // Support both naming schemes (requestId for Code.gs and paymentProofId for google-drive-archive-script.gs)
+    requestId: params.requestId,
+    paymentProofId: params.requestId,
+    firebaseIdToken: params.firebaseIdToken,
+    registrationId: params.registrationId,
+    teamId: params.teamId || '',
+    teamName: params.teamId || params.eventName || 'GENERAL',
+    eventName: params.eventName || '',
+    transactionId: params.transactionId || '',
+    bankName: params.bankName || '',
+    transactionDate: params.transactionDate || '',
+    fileName: params.originalFileName || `${params.requestId}.png`,
+    originalFileName: params.originalFileName || 'payment_proof',
+    mimeType: params.mimeType,
+    fileSize: params.fileSize,
+    // Support both image data field names
+    fileData,
+    base64Data: fileData,
+    uploadedAt: params.uploadedAt,
+    uploadedAtIST: params.uploadedAtIST,
+    year,
+    month,
+    date,
+  };
+
+  const controller = new AbortController();
+  // 30-second timeout — base64 of ~800 KB on a slow mobile connection
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+  try {
     const response = await fetch(webAppUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'text/plain;charset=utf-8', // Apps Script requires simple text/plain to prevent CORS preflight issues
-      },
+      // Apps Script requires Content-Type: text/plain to avoid CORS preflight
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(payload),
       signal: controller.signal,
     });
@@ -154,31 +193,45 @@ export async function archivePaymentProofToGoogleDrive({
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      throw new Error(`Google Drive WebApp returned HTTP status ${response.status}`);
+      return {
+        success: false,
+        errorCode: 'HTTP_ERROR',
+        error: `Upload service returned HTTP ${response.status}. Please retry.`,
+        requestId: params.requestId,
+      };
     }
 
     const result = await response.json();
 
     if (!result.success) {
-      throw new Error(result.error || 'Google Drive archive service reported an error.');
+      return {
+        success: false,
+        errorCode: result.errorCode || 'DRIVE_UPLOAD_FAILED',
+        error: result.message || result.error || 'Google Drive upload failed.',
+        requestId: params.requestId,
+      };
     }
 
     return {
       success: true,
+      requestId: result.requestId || result.paymentProofId || params.requestId,
+      driveFileId: result.driveFileId || result.fileId || '',
+      driveFileUrl: result.driveFileUrl || result.driveUrl || '',
+      driveFileName: result.driveFileName || result.fileName || '',
+      driveFolderId: result.driveFolderId || result.folderId || '',
+      drivePath: result.drivePath || result.path || '',
       alreadyExisted: !!result.alreadyExisted,
-      fileId: result.fileId || '',
-      folderId: result.folderId || '',
-      driveUrl: result.driveUrl || '',
-      path: result.path || targetDrivePath,
     };
   } catch (err: any) {
-    console.warn('Google Drive Archival Exception:', err.message || err);
+    clearTimeout(timeoutId);
+    const isTimeout = err.name === 'AbortError';
     return {
       success: false,
-      error: err.name === 'AbortError'
-        ? 'Google Drive Archival timed out. Supabase storage remains intact.'
-        : (err.message || 'Google Drive Archival failed.'),
-      path: targetDrivePath,
+      errorCode: isTimeout ? 'TIMEOUT' : 'NETWORK_ERROR',
+      error: isTimeout
+        ? 'Upload timed out. Please check your internet connection and retry.'
+        : err.message || 'Network error during upload. Please retry.',
+      requestId: params.requestId,
     };
   }
 }

@@ -44,11 +44,11 @@ export const MyEventsPage: React.FC = () => {
   const fetchParticipantData = async () => {
     if (!participantProfile?.uid) return;
     try {
-      // 1. Fetch user teams
-      const allTeams = await db.getCollection('teams');
-      const pTeams = (allTeams as unknown as EventTeam[]).filter((t) =>
-        t.memberUids?.includes(participantProfile.uid)
-      );
+      // 1. Fetch user teams using targeted Firestore query
+      const teamsRef = collection(firestore, 'teams');
+      const qTeams = query(teamsRef, where('memberUids', 'array-contains', participantProfile.uid));
+      const teamSnap = await getDocs(qTeams);
+      const pTeams = teamSnap.docs.map((d) => d.data() as EventTeam);
       const tMap: Record<string, EventTeam> = {};
       pTeams.forEach((t) => {
         if (t.eventId) {
@@ -60,18 +60,18 @@ export const MyEventsPage: React.FC = () => {
       });
       setTeamsMap(tMap);
 
-      // 2. Fetch user registrations
+      // 2. Fetch user registrations using targeted Firestore query
       const regsRef = collection(firestore, 'registrations');
-      const q = query(regsRef, where('uid', '==', participantProfile.uid));
-      const snap = await getDocs(q);
+      const qRegs = query(regsRef, where('uid', '==', participantProfile.uid));
+      const regSnap = await getDocs(qRegs);
       const rMap: Record<string, EventRegistration> = {};
-      snap.docs.forEach((d) => {
+      regSnap.docs.forEach((d) => {
         const reg = d.data() as EventRegistration;
         rMap[reg.eventId] = reg;
       });
       setRegistrationsMap(rMap);
-    } catch {
-      // Fallback
+    } catch (err) {
+      console.warn('Error fetching participant data:', err);
     }
   };
 
@@ -155,6 +155,7 @@ export const MyEventsPage: React.FC = () => {
                   subtitle={ev.shortDescription}
                   category={ev.category === 'TECHNICAL' ? 'technical' : 'non-technical'}
                   badge={ev.type === 'TEAM' ? 'TEAM TRACK' : 'INDIVIDUAL'}
+                  imageUrl={ev.image || ev.bannerImage}
                 >
                   <div className="space-y-4 text-xs font-mono">
                     <p className="italic text-[#b91c1c]">"{ev.theme}"</p>
@@ -192,6 +193,14 @@ export const MyEventsPage: React.FC = () => {
                           <div className="flex justify-between">
                             <span className="text-slate-400">Submitted UTR:</span>
                             <span className="text-amber-300 font-bold">{regDoc.utrNumber || 'N/A'}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-400">Bank Name:</span>
+                            <span className="text-white font-bold">{regDoc.bankName || (regDoc.paymentProof as any)?.bankName || 'Not provided'}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-400">Transaction Date:</span>
+                            <span className="text-white font-bold">{regDoc.transactionDate || (regDoc.paymentProof as any)?.transactionDate || 'Not provided'}</span>
                           </div>
 
                           {regDoc.rejectionReason && (
