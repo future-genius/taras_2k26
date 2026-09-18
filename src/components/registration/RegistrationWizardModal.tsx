@@ -148,6 +148,7 @@ export const RegistrationWizardModal: React.FC<RegistrationWizardModalProps> = (
       setUtrInput(existingRegistration.utrNumber || '');
       setBankNameInput(existingRegistration.bankName || '');
       setTransactionDateInput(existingRegistration.transactionDate || '');
+      setErrorMsg(null); // Always clear stale errors from previous attempts
       return;
     }
 

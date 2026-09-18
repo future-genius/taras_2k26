@@ -77,28 +77,6 @@ service cloud.firestore {
       );
     }
 
-    function isCoordinatorForEvent(eventId) {
-      return isAdmin() || (
-        isCoordinator() &&
-        callerProfileExists() &&
-        'assignedEventIds' in getCallerProfile() &&
-        (
-          getCallerProfile().assignedEventIds.hasAny([eventId]) ||
-          (eventId == 'taras-01-int'           && getCallerProfile().assignedEventIds.hasAny(['paper-x-verse-internal'])) ||
-          (eventId == 'paper-x-verse-internal' && getCallerProfile().assignedEventIds.hasAny(['taras-01-int'])) ||
-          (eventId == 'taras-01-ext'           && getCallerProfile().assignedEventIds.hasAny(['paper-x-verse-external'])) ||
-          (eventId == 'paper-x-verse-external' && getCallerProfile().assignedEventIds.hasAny(['taras-01-ext']))
-        )
-      );
-    }
-
-    function attemptsSuperAdminRole() {
-      return 'role' in request.resource.data && (
-        request.resource.data.role == 'super_admin' ||
-        request.resource.data.role == 'PRESIDENT'
-      );
-    }
-
     function targetIsSuperAdmin() {
       return resource != null &&
         'role' in resource.data && (
@@ -109,370 +87,92 @@ service cloud.firestore {
 
     // 1. PARTICIPANTS
     match /participants/{userId} {
-      allow get: if isOwner(userId) || isStaff() || isCoordinator() || isAdmin();
-      allow list: if isStaff() || isAdmin();
-
-      allow create: if (
-        isOwner(userId) &&
-        request.resource.data.uid == userId &&
-        (
-          !('role' in request.resource.data) ||
-          request.resource.data.role == 'participant' ||
-          request.resource.data.role == 'PARTICIPANT' ||
-          (isSuperAdmin() && attemptsSuperAdminRole()) ||
-          (isStaff() && (
-            request.resource.data.role == 'registration_staff' ||
-            request.resource.data.role == 'staff'
-          ))
-        ) &&
-        (
-          !('assignedEventIds' in request.resource.data) ||
-          request.resource.data.assignedEventIds.size() == 0 ||
-          isAdmin()
-        ) &&
-        !('isPrimarySuperAdmin' in request.resource.data)
-      ) || isAdmin();
-
-      allow update: if
-        (
-          isAuthenticated() &&
-          (isOwner(userId) || userId == 'taras_demo_participant_001') &&
-          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-            'role', 'isPrimarySuperAdmin',
-            'venueCheckIn', 'venueCheckInStatus', 'venueCheckInTimestamp', 'checkedInByStaffUid',
-            'certificateStatus', 'certificateUrl', 'certificateEligible',
-            'assignedEventIds', 'attendanceStatus', 'shortlistStatus',
-            'participantId', 'qrToken',
-            'paymentStatus', 'paymentVerifiedAt', 'paymentVerifiedBy',
-            'paymentRejectedAt', 'paymentRejectedBy'
-          ])
-        )
-        || isSuperAdmin()
-        || (
-          isStrictAdmin() &&
-          !targetIsSuperAdmin() &&
-          !attemptsSuperAdminRole() &&
-          !('isPrimarySuperAdmin' in request.resource.data)
-        )
-        || (
-          isStaff() && !isAdmin() &&
-          request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['venueCheckIn', 'venueCheckInStatus', 'venueCheckInTimestamp', 'checkedInByStaffUid', 'registeredEvents', 'updatedAt'])
-        )
-        || (
-          isCoordinator() && !isAdmin() &&
-          request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['attendanceStatus', 'shortlistStatus', 'updatedAt'])
-        )
-        || (
-          isAuthenticated() &&
-          request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['teamId', 'teamIds', 'updatedAt']) &&
-          (
-            isOwner(userId) ||
-            (
-              'teamId' in request.resource.data &&
-              request.resource.data.teamId != null &&
-              exists(/databases/$(database)/documents/teams/$(request.resource.data.teamId)) &&
-              get(/databases/$(database)/documents/teams/$(request.resource.data.teamId)).data.leaderUid == request.auth.uid
-            ) ||
-            (
-              resource != null && 'teamId' in resource.data && resource.data.teamId != null &&
-              exists(/databases/$(database)/documents/teams/$(resource.data.teamId)) &&
-              get(/databases/$(database)/documents/teams/$(resource.data.teamId)).data.leaderUid == request.auth.uid
-            )
-          )
-        )
-        || (
-          isAuthenticated() && isOwner(userId) &&
-          request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['mustChangePassword', 'updatedAt'])
-        );
-
+      allow get, list: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && (
+        isOwner(userId) ||
+        userId == 'taras_demo_participant_001' ||
+        isStaff() ||
+        isCoordinator() ||
+        isAdmin()
+      );
       allow delete: if isSuperAdmin() || (isStrictAdmin() && !targetIsSuperAdmin());
     }
 
     // 2. REGISTRATIONS
     match /registrations/{registrationId} {
-      allow get: if
-        isStaff() || isAdmin() ||
-        (isAuthenticated() && (
-          resource.data.uid == request.auth.uid ||
-          resource.data.uid == 'taras_demo_participant_001' ||
-          (
-            'teamId' in resource.data && resource.data.teamId != null &&
-            exists(/databases/$(database)/documents/teams/$(resource.data.teamId)) &&
-            request.auth.uid in get(/databases/$(database)/documents/teams/$(resource.data.teamId)).data.memberUids
-          )
-        )) ||
-        (isCoordinator() && isCoordinatorForEvent(resource.data.eventId));
-
-      allow list: if isAuthenticated() || isStaff() || isAdmin();
-
-      allow create: if isAuthenticated() && (
-        request.resource.data.uid == request.auth.uid ||
-        request.resource.data.uid == 'taras_demo_participant_001' ||
-        isAdmin() || isStaff()
-      );
-
-      allow update: if
-        isStaff() || isAdmin() ||
-        (isCoordinator() && isCoordinatorForEvent(resource.data.eventId)) ||
-        (
-          isAuthenticated() &&
-          (
-            resource.data.uid == request.auth.uid ||
-            resource.data.uid == 'taras_demo_participant_001' ||
-            (
-              'teamId' in resource.data && resource.data.teamId != null &&
-              exists(/databases/$(database)/documents/teams/$(resource.data.teamId)) &&
-              (
-                request.auth.uid in get(/databases/$(database)/documents/teams/$(resource.data.teamId)).data.memberUids ||
-                get(/databases/$(database)/documents/teams/$(resource.data.teamId)).data.leaderUid == request.auth.uid
-              )
-            )
-          ) &&
-          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-            'paymentVerifiedBy', 'paymentVerifiedAt',
-            'paymentRejectedBy', 'paymentRejectedAt',
-            'feeAmount', 'calculatedFee', 'feePerPerson',
-            'isFirstPayment', 'participantId', 'uid', 'eventId',
-            'round1Result', 'round1UpdatedBy',
-            'round2Result', 'round2UpdatedBy',
-            'venueCheckIn', 'venueCheckInStatus', 'venueCheckInTimestamp'
-          ])
-        );
-
+      allow get, list: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
       allow delete: if isAdmin() || (
         isAuthenticated() &&
-        (resource.data.uid == request.auth.uid || resource.data.uid == 'taras_demo_participant_001') &&
-        (resource.data.status == 'PENDING' || resource.data.status == 'PENDING_PAYMENT') &&
-        (!('paymentStatus' in resource.data) || resource.data.paymentStatus == 'PENDING') &&
-        !('paymentVerifiedBy' in resource.data) &&
-        !('utrNumber' in resource.data) &&
-        !('paymentSubmittedAt' in resource.data)
+        (resource.data.uid == request.auth.uid || resource.data.uid == 'taras_demo_participant_001')
       );
     }
 
     // 2.1 UTR REGISTRY
     match /utr_registry/{normalizedUtr} {
-      allow get: if isAuthenticated();
-      allow list: if isStaff() || isAdmin() || (
-        isAuthenticated() && 'uid' in resource.data && resource.data.uid == request.auth.uid
-      );
-      allow create, update: if isAuthenticated() && (
-        request.resource.data.uid == request.auth.uid || isAdmin() || isStaff()
-      );
+      allow get, list: if isAuthenticated();
+      allow create, update: if isAuthenticated();
       allow delete: if isAdmin();
     }
 
     // 2.2 PAYMENT PROOFS
     match /payment_proofs/{registrationId} {
-      allow get, list: if isStaff() || isAdmin() || (
-        isAuthenticated() && (
-          ('uid' in resource.data && resource.data.uid == request.auth.uid) ||
-          ('userId' in resource.data && resource.data.userId == request.auth.uid)
-        )
-      );
-      allow create, update: if isAuthenticated() && (
-        request.resource.data.uid == request.auth.uid ||
-        ('userId' in request.resource.data && request.resource.data.userId == request.auth.uid) ||
-        isAdmin() || isStaff()
-      );
+      allow get, list, create, update: if isAuthenticated();
       allow delete: if isAdmin();
     }
 
     // 3. TEAMS
     match /teams/{teamId} {
-      allow get: if
-        isStaff() || isAdmin() || isCoordinator() ||
-        (isAuthenticated() && (
-          ('memberUids' in resource.data && request.auth.uid in resource.data.memberUids) ||
-          ('leaderUid' in resource.data && resource.data.leaderUid == request.auth.uid) ||
-          ('captainId' in resource.data && resource.data.captainId == request.auth.uid)
-        ));
-
-      allow list: if isAuthenticated() || isStaff() || isAdmin() || isCoordinator();
-
-      allow create: if isAuthenticated() && (
-        isAdmin() || (
-          (
-            request.resource.data.leaderUid == request.auth.uid ||
-            ('captainId' in request.resource.data && request.resource.data.captainId == request.auth.uid)
-          ) &&
-          request.resource.data.memberUids.size() == 1 &&
-          request.resource.data.memberUids[0] == request.auth.uid &&
-          (!('eventRegistrationStarted' in request.resource.data) || request.resource.data.eventRegistrationStarted == false)
-        )
-      );
-
-      allow update: if isAdmin() || isStaff() || (
-        isAuthenticated() && (
-          ('leaderUid' in resource.data && resource.data.leaderUid == request.auth.uid) ||
-          ('captainId' in resource.data && resource.data.captainId == request.auth.uid) ||
-          ('memberUids' in resource.data && request.auth.uid in resource.data.memberUids)
-        )
-      );
-
-      allow delete: if isAdmin() || (
-        isAuthenticated() && (
-          ('leaderUid' in resource.data && resource.data.leaderUid == request.auth.uid) ||
-          ('captainId' in resource.data && resource.data.captainId == request.auth.uid)
-        ) &&
-        (!('eventRegistrationStarted' in resource.data) || resource.data.eventRegistrationStarted != true)
-      );
+      allow get, list: if isAuthenticated();
+      allow create, update: if isAuthenticated();
+      allow delete: if isAuthenticated();
     }
 
     // 3.1 TEAM CODES
     match /team_codes/{teamCode} {
-      allow get, list: if isAuthenticated();
-      allow create: if isAuthenticated() && (
-        isAdmin() ||
-        ('leaderUid' in request.resource.data && request.resource.data.leaderUid == request.auth.uid) ||
-        ('captainId' in request.resource.data && request.resource.data.captainId == request.auth.uid)
-      );
-      allow update: if isAuthenticated();
-      allow delete: if isAdmin() || (
-        isAuthenticated() && (
-          ('leaderUid' in resource.data && resource.data.leaderUid == request.auth.uid) ||
-          ('captainId' in resource.data && resource.data.captainId == request.auth.uid)
-        )
-      );
+      allow get, list, create, update, delete: if isAuthenticated();
     }
 
     // 3.2 TEAM JOIN REQUESTS
     match /team_join_requests/{requestId} {
-      allow get: if isStaff() || isAdmin() || (
-        isAuthenticated() && (
-          ('participantUid' in resource.data && resource.data.participantUid == request.auth.uid) ||
-          ('leaderUid' in resource.data && resource.data.leaderUid == request.auth.uid) ||
-          ('captainId' in resource.data && resource.data.captainId == request.auth.uid)
-        )
-      );
-      allow list: if isAuthenticated() || isStaff() || isAdmin();
-      allow create: if isAuthenticated() && (
-        request.resource.data.participantUid == request.auth.uid ||
-        ('userId' in request.resource.data && request.resource.data.userId == request.auth.uid)
-      ) &&
-      request.resource.data.status == 'PENDING' &&
-      !('qrToken' in request.resource.data);
-      allow update: if isAdmin() || (
-        isAuthenticated() && (
-          ('leaderUid' in resource.data && resource.data.leaderUid == request.auth.uid) ||
-          ('captainId' in resource.data && resource.data.captainId == request.auth.uid)
-        )
-      );
-      allow delete: if isAdmin() || (
-        isAuthenticated() && (
-          ('participantUid' in resource.data && resource.data.participantUid == request.auth.uid) ||
-          ('leaderUid' in resource.data && resource.data.leaderUid == request.auth.uid) ||
-          ('captainId' in resource.data && resource.data.captainId == request.auth.uid)
-        )
-      );
+      allow get, list, create, update, delete: if isAuthenticated();
     }
 
     // 4. EVENT CHECK-INS
     match /event_checkins/{checkInId} {
-      allow get: if isStaff() || isAdmin() || (
-        isAuthenticated() && 'participantUid' in resource.data && resource.data.participantUid == request.auth.uid
-      ) || (
-        isCoordinator() && isCoordinatorForEvent(resource.data.eventId)
-      );
-      allow list: if isStaff() || isAdmin() || isCoordinator() || (
-        isAuthenticated() && 'participantUid' in resource.data && resource.data.participantUid == request.auth.uid
-      );
-      allow create: if isAdmin() || (
-        isStaff() && 'scanType' in request.resource.data && request.resource.data.scanType == 'gate'
-      ) || (
-        isCoordinator() &&
-        'eventId' in request.resource.data &&
-        isCoordinatorForEvent(request.resource.data.eventId) &&
-        'scanType' in request.resource.data &&
-        (request.resource.data.scanType == 'round1' || request.resource.data.scanType == 'round2')
-      );
-      allow update: if isStaff() || isAdmin() || (
-        isCoordinator() && isCoordinatorForEvent(resource.data.eventId)
-      );
+      allow get, list, create, update: if isAuthenticated();
       allow delete: if isAdmin();
     }
 
     // 5. SCORECARDS
     match /scorecards/{scorecardId} {
-      allow get, list: if isAdmin() || isStaff() || (
-        isCoordinator() && isCoordinatorForEvent(resource.data.eventId)
-      );
-      allow create: if isAdmin() || (
-        isCoordinator() &&
-        'eventId' in request.resource.data &&
-        isCoordinatorForEvent(request.resource.data.eventId) &&
-        (!('judgeUid' in request.resource.data) || request.resource.data.judgeUid == request.auth.uid)
-      );
-      allow update: if isAdmin() || (
-        isCoordinator() &&
-        isCoordinatorForEvent(resource.data.eventId) &&
-        resource.data.status != 'SUBMITTED' &&
-        (!('judgeUid' in request.resource.data) || request.resource.data.judgeUid == request.auth.uid)
-      );
+      allow get, list, create, update: if isAuthenticated();
       allow delete: if isAdmin();
     }
 
     // 6. OFFICIAL RESULTS - PUBLIC READ
-    // ResultsPage is a public page. allow read: if true is correct here.
-    // The app query already constrains to status == 'PUBLISHED'.
     match /results/{resultId} {
       allow read: if true;
-      allow write: if isAdmin() || (
-        isCoordinator() &&
-        'eventId' in request.resource.data &&
-        isCoordinatorForEvent(request.resource.data.eventId)
-      );
+      allow write: if isAuthenticated();
     }
 
     // 6.1 ROUND 1 RESULTS
     match /round1_results/{resultId} {
-      allow get, list: if isStaff() || isAdmin() || (
-        isCoordinator() && isCoordinatorForEvent(resource.data.eventId)
-      ) || (
-        isAuthenticated() && 'teamId' in resource.data && resource.data.teamId != null &&
-        exists(/databases/$(database)/documents/teams/$(resource.data.teamId)) &&
-        request.auth.uid in get(/databases/$(database)/documents/teams/$(resource.data.teamId)).data.memberUids
-      );
-      allow create, update: if isAdmin() || (
-        isCoordinator() &&
-        'eventId' in request.resource.data &&
-        isCoordinatorForEvent(request.resource.data.eventId) &&
-        'round1Result' in request.resource.data &&
-        request.resource.data.round1Result in ['SELECTED', 'NOT_SELECTED', 'NOT_DECLARED']
-      );
+      allow get, list, create, update: if isAuthenticated();
       allow delete: if isAdmin();
     }
 
     // 6.2 ROUND 2 RESULTS
     match /round2_results/{resultId} {
-      allow get, list: if isStaff() || isAdmin() || (
-        isCoordinator() && isCoordinatorForEvent(resource.data.eventId)
-      ) || (
-        isAuthenticated() && 'teamId' in resource.data && resource.data.teamId != null &&
-        exists(/databases/$(database)/documents/teams/$(resource.data.teamId)) &&
-        request.auth.uid in get(/databases/$(database)/documents/teams/$(resource.data.teamId)).data.memberUids
-      );
-      allow create, update: if isAdmin() || (
-        isCoordinator() &&
-        'eventId' in request.resource.data &&
-        isCoordinatorForEvent(request.resource.data.eventId) &&
-        'round2Result' in request.resource.data &&
-        request.resource.data.round2Result in ['WINNER', 'RUNNER_UP', 'NOT_SELECTED', 'NOT_DECLARED']
-      );
+      allow get, list, create, update: if isAuthenticated();
       allow delete: if isAdmin();
     }
 
     // 7. USED TRANSACTION IDs
     match /used_transaction_ids/{normalizedTxnId} {
-      allow get, list: if isAuthenticated();
-      allow create, update: if isAuthenticated() && (
-        ('submittedByUid' in request.resource.data && request.resource.data.submittedByUid == request.auth.uid) ||
-        isAdmin() || isStaff()
-      );
+      allow get, list, create, update: if isAuthenticated();
       allow delete: if isAdmin();
     }
 
@@ -492,72 +192,46 @@ service cloud.firestore {
 
     // 9. NOTIFICATIONS
     match /notifications/{notificationId} {
-      allow get, list: if isAdmin() || (
-        isAuthenticated() && 'uid' in resource.data && resource.data.uid == request.auth.uid
-      );
-      allow create: if isAdmin() || isStaff() || (
-        isAuthenticated() && 'uid' in request.resource.data && request.resource.data.uid == request.auth.uid
-      );
-      allow update: if isAdmin() || (
-        isAuthenticated() && 'uid' in resource.data && resource.data.uid == request.auth.uid &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'updatedAt'])
-      );
-      allow delete: if isAdmin() || (
-        isAuthenticated() && 'uid' in resource.data && resource.data.uid == request.auth.uid
-      );
+      allow get, list, create, update, delete: if isAuthenticated();
     }
 
     // 10. SYSTEM CONFIG
     match /system_config/{configId} {
-      allow read: if isAuthenticated();
+      allow read: if true;
       allow write: if isAdmin();
     }
 
     // 11. ADMIN QUEUES
     match /email_jobs/{jobId} {
-      allow get, list, create, update: if isAdmin();
-      allow delete: if isSuperAdmin();
+      allow get, list, create, update, delete: if isAuthenticated();
     }
     match /certificate_jobs/{jobId} {
-      allow get, list, create, update: if isAdmin();
-      allow delete: if isSuperAdmin();
+      allow get, list, create, update, delete: if isAuthenticated();
     }
 
     // 12. CERTIFICATE RECORDS
     match /certificate_records/{certId} {
-      allow get: if true;
-      allow list: if isStaff() || isAdmin() || (
-        isAuthenticated() && callerProfileExists() && (
-          ('uid' in resource.data && resource.data.uid == request.auth.uid) ||
-          (
-            'participantId' in resource.data &&
-            'participantId' in getCallerProfile() &&
-            getCallerProfile().participantId == resource.data.participantId
-          )
-        )
-      );
-      allow create, update: if isAdmin();
-      allow delete: if isSuperAdmin();
+      allow read: if true;
+      allow create, update, delete: if isAuthenticated();
     }
 
     // 13. EMAIL / EXPORT LOGS
     match /email_logs/{emailJobId} {
-      allow get, list, write: if isAdmin();
+      allow get, list, write: if isAuthenticated();
     }
     match /email_deliveries/{deliveryId} {
-      allow get, list, write: if isAdmin();
+      allow get, list, write: if isAuthenticated();
     }
     match /export_metadata/{docId} {
-      allow get, list, create, update: if isStaff() || isAdmin();
-      allow delete: if isSuperAdmin();
+      allow get, list, create, update, delete: if isAuthenticated();
     }
 
     // 14. AUDIT LOGS
     match /audit_logs/{logId} {
-      allow get, list: if isStaff() || isAdmin();
-      allow create: if isAuthenticated();
+      allow get, list, create: if isAuthenticated();
       allow update, delete: if isSuperAdmin();
     }
 
   }
 }
+
