@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import {
   subscribeToUserTeams,
@@ -62,9 +62,15 @@ export const TeamHub: React.FC = () => {
   const availableEventsForTeam = MOCK_EVENTS.filter((ev) => isInternalUser ? (ev.allowInternal || ev.id === 'taras-01-int') : ev.allowExternal);
 
   // Create form states
+  const location = useLocation();
+  const preSelectedEventId = (location.state as any)?.preSelectedEventId;
+  
   const [newTeamName, setNewTeamName] = useState('');
-  const [selectedEventId, setSelectedEventId] = useState<string>(availableEventsForTeam[0]?.id || MOCK_EVENTS[0].id);
-  const [memberCount, setMemberCount] = useState(availableEventsForTeam[0]?.minTeamSize || MOCK_EVENTS[0].minTeamSize);
+  const [selectedEventId, setSelectedEventId] = useState<string>(preSelectedEventId || availableEventsForTeam[0]?.id || MOCK_EVENTS[0].id);
+  const [memberCount, setMemberCount] = useState(() => {
+    const initialEvent = MOCK_EVENTS.find(e => e.id === (preSelectedEventId || availableEventsForTeam[0]?.id || MOCK_EVENTS[0].id));
+    return initialEvent?.minTeamSize || MOCK_EVENTS[0].minTeamSize;
+  });
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -727,26 +733,7 @@ export const TeamHub: React.FC = () => {
             </div>
           )}
 
-          <div>
-            <label className="block text-slate-300 font-bold uppercase text-[10px] mb-1.5">
-              Select Event <span className="text-red-400">*</span>
-            </label>
-            <select
-              value={selectedEventId}
-              onChange={(e) => {
-                const id = e.target.value;
-                setSelectedEventId(id);
-                const ev = MOCK_EVENTS.find((m) => m.id === id);
-                if (ev) setMemberCount(ev.minTeamSize);
-              }}
-              className="w-full px-3 py-2.5 bg-[#0a0c10] border border-slate-700 rounded-xl text-white focus:outline-none focus:border-[#b91c1c] transition-colors"
-            >
-              {availableEventsForTeam.map((ev) => (
-                <option key={ev.id} value={ev.id}>
-                  {ev.name} (Team Size: {ev.minTeamSize === ev.maxTeamSize ? `${ev.minTeamSize} Member` : `${ev.minTeamSize}–${ev.maxTeamSize} Members`})
-                </option>
-              ))}
-            </select>
+
             <div className="mt-2 p-2.5 rounded-lg bg-[#0a0c10] border border-slate-800 text-[11px] space-y-1">
               <div className="text-slate-300 flex justify-between">
                 <span>Event: <strong className="text-white">{selectedEventConfig.name}</strong></span>
@@ -757,10 +744,7 @@ export const TeamHub: React.FC = () => {
               <div className="text-amber-400 font-bold">
                 Configured Team Size: {selectedEventConfig.minTeamSize === selectedEventConfig.maxTeamSize ? `${selectedEventConfig.minTeamSize} members` : `${selectedEventConfig.minTeamSize}–${selectedEventConfig.maxTeamSize} members`}
               </div>
-            </div>
-          </div>
-
-          <div>
+            </div>          <div>
             <label className="block text-slate-300 font-bold uppercase text-[10px] mb-1.5">
               Squad Name <span className="text-red-400">*</span>
             </label>

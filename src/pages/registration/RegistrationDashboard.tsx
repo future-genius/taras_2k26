@@ -187,7 +187,7 @@ export const RegistrationDashboard: React.FC = () => {
   // Total Collection strictly counts VERIFIED payments only
   const verifiedCollection = registrations
     .filter((r) => r.paymentStatus === 'VERIFIED' || r.status === 'CONFIRMED')
-    .reduce((sum, r) => sum + (r.feeAmount || 200), 0);
+    .reduce((sum, r) => sum + (r.calculatedFee ?? r.feeAmount ?? 200), 0);
 
   // Search & Filtered Registrations
   const filteredRegistrations = registrations.filter((reg) => {
@@ -735,7 +735,7 @@ export const RegistrationDashboard: React.FC = () => {
 
                         <div className="text-slate-400 text-[11px] flex flex-wrap items-center gap-3">
                           <span>UTR: <strong className="text-amber-300">{reg.utrNumber || 'N/A'}</strong></span>
-                          <span>Fee: <strong className="text-white">₹{reg.feeAmount || 200}</strong></span>
+                          <span>Fee: <strong className="text-white">₹{reg.calculatedFee ?? reg.feeAmount ?? 200}</strong></span>
                           <span>Submitted: {reg.paymentSubmittedAt ? new Date(reg.paymentSubmittedAt).toLocaleDateString() : 'N/A'}</span>
                         </div>
                       </div>
@@ -1057,7 +1057,7 @@ export const RegistrationDashboard: React.FC = () => {
 
               <div>
                 <span className="text-slate-400 text-[10px] uppercase block">Expected Fee Amount:</span>
-                <span className="text-white font-extrabold text-sm">₹{selectedReg.feeAmount || 200}</span>
+                <span className="text-white font-extrabold text-sm">₹{selectedReg.calculatedFee ?? selectedReg.feeAmount ?? 200}</span>
               </div>
 
               <div>

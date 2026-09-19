@@ -315,7 +315,7 @@ export const EventDetailView: React.FC<EventDetailViewProps> = ({ event }) => {
               <Button
                 variant="glow"
                 size="md"
-                onClick={() => navigate('/participant/dashboard#my-squads-section')}
+                onClick={() => navigate('/participant/dashboard#my-squads-section', { state: { preSelectedEventId: event.id } })}
                 className="text-xs"
               >
                 CREATE SQUAD IN TEAM HUB →
