@@ -19,7 +19,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   allowedRoles,
   requireSuperAdmin = false,
 }) => {
-  const { user, participantProfile, role, isSuperAdmin, loading } = useAuth();
+  const { user, participantProfile, role, isSuperAdmin, isAdmin, isStaff, isCoordinator, loading } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -33,6 +33,11 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   // Authoritative Firebase Auth check: must have active user session
   if (!user) {
     return <Navigate to="/participant/login" state={{ from: location }} replace />;
+  }
+
+  // Registration Check: Authenticated in Auth, but has NO application record
+  if (!participantProfile && !isSuperAdmin && !isAdmin && !isStaff && !isCoordinator) {
+    return <Navigate to="/participant/register" state={{ from: location }} replace />;
   }
 
   // President-only gate

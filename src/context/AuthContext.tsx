@@ -209,9 +209,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       const participantType = getParticipantType(normalizedRegNo);
 
-      const user = await signUpWithEmail(email, pass);
-      saveSessionUser(user);
-      setAuthUser(user);
+      let user = authUser;
+      if (!user) {
+        user = await signUpWithEmail(email, pass);
+        saveSessionUser(user);
+        setAuthUser(user);
+      } else if (user.email !== email.trim().toLowerCase()) {
+        throw new Error('You are already authenticated with a different email. Please logout first.');
+      }
 
       const emailLower = email.trim().toLowerCase();
       const emailRoleOverride: UserRole | null =
@@ -350,37 +355,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         syncProfile(profile);
         resolvedRole = (profile.role as string) || 'participant';
       } else {
-        // Create basic profile if first time
-        const participantId = generateParticipantId();
-        const now = new Date().toISOString();
-        const initialRole = emailRoleOverride || 'participant';
-        const newProfile: ParticipantProfile = {
-          uid: user.uid,
-          participantId,
-          fullName: email.split('@')[0],
-          email: emailLower,
-          phone: '',
-          college: '',
-          department: 'ECE',
-          year: 'III',
-          section: 'A',
-          registrationNumber: '',
-          role: initialRole,
-          assignedEventIds: [],
-          qrToken: generateQRToken(participantId),
-          venueCheckIn: false,
-          venueCheckInStatus: 'NOT_CHECKED_IN',
-          registeredEvents: [],
-          teamIds: [],
-          attendanceStatus: {},
-          shortlistStatus: {},
-          certificateStatus: 'PENDING',
-          createdAt: now,
-          updatedAt: now,
-        };
-        await db.setDoc('participants', user.uid, newProfile as unknown as Record<string, unknown>);
-        syncProfile(newProfile);
-        resolvedRole = initialRole;
+        // User exists in Firebase Auth but has no application record.
+        // DO NOT auto-create a fake participant profile.
+        setParticipantProfile(null);
+        resolvedRole = emailRoleOverride ? (emailRoleOverride as string) : 'unregistered';
       }
       return { role: resolvedRole };
     } catch (err: unknown) {

@@ -36,6 +36,12 @@ export const LoginPage: React.FC = () => {
     try {
       const { role } = await login(email, password);
 
+      // If they authenticated but have no participant record (e.g. from a DB reset)
+      if (role === 'unregistered') {
+        navigate('/participant/register', { replace: true, state: { ...location.state } });
+        return;
+      }
+
       // If the user was redirected here from a deep-link, honour it
       const requestedPath = (location.state as any)?.from?.pathname;
       if (requestedPath && requestedPath !== '/participant/dashboard') {
