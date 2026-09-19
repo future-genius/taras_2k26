@@ -133,9 +133,23 @@ export async function generateParticipantExport(
   const eventsList: any[] = [];
   eventsSnap.forEach((d) => eventsList.push({ id: d.id, ...d.data() }));
 
+  // ── PARTICIPANT FILTER ────────────────────────────────────────────────────
+  // The `participants` Firestore collection stores ALL user profiles, including
+  // staff, coordinators, event heads, registration team, president, and admin.
+  // Only records with role 'participant' or 'PARTICIPANT' are genuine registrants.
+  // All other roles (super_admin, admin, staff, registration_staff, coordinator,
+  // PRESIDENT, REGISTRATION_TEAM, EVENT_HEAD) are system/staff identities and
+  // must NOT appear in the participant Excel export.
+  // This filter is read-only — it does NOT modify or delete any Firestore data.
+  const PARTICIPANT_ROLES = new Set(['participant', 'PARTICIPANT']);
+  const exportParticipantsList = participantsList.filter(
+    (p) => PARTICIPANT_ROLES.has(p.role)
+  );
+  // ─────────────────────────────────────────────────────────────────────────
+
   // Build Lookup Maps
   const participantMap = new Map<string, ParticipantProfile>();
-  participantsList.forEach((p) => {
+  exportParticipantsList.forEach((p) => {
     if (p.uid) participantMap.set(p.uid, p);
   });
 
@@ -162,6 +176,7 @@ export async function generateParticipantExport(
     if (r.teamId) r2Map.set(r.teamId, r);
     if (r.participantUid) r2Map.set(r.participantUid, r);
   });
+
 
   const dateTag = new Date().toISOString().split('T')[0];
   const timeTag = new Date().toTimeString().split(' ')[0].replace(/:/g, '');
@@ -200,7 +215,7 @@ export async function generateParticipantExport(
     const sheet1Rows: (string | number)[][] = [sheet1Headers];
     let partSNo = 1;
 
-    participantsList.forEach((p) => {
+    exportParticipantsList.forEach((p) => {
       const pRegs = registrationsList.filter((r) => r.uid === p.uid || r.participantId === p.participantId);
       const gateCheck = checkinMap.get(p.uid);
       const isGateCheckedIn = p.venueCheckIn || gateCheck?.status === 'CHECKED_IN' || !!gateCheck;
@@ -454,7 +469,7 @@ export async function generateParticipantExport(
 
     const csvRows: string[] = [csvHeaders.map(escapeCsvCell).join(',')];
 
-    participantsList.forEach((p) => {
+    exportParticipantsList.forEach((p) => {
       const pRegs = registrationsList.filter((r) => r.uid === p.uid || r.participantId === p.participantId);
       const pTeams = teamsList.filter((t) => (t.memberUids || []).includes(p.uid));
       const gateCheck = checkinMap.get(p.uid);
