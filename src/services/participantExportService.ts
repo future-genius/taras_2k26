@@ -12,6 +12,7 @@ import { firestore } from '../config/firebase';
 import type { ParticipantProfile } from '../types/participant';
 import type { EventRegistration } from '../types/registration';
 import type { EventTeam } from '../types/team';
+import { MOCK_EVENTS } from '../data/events';
 
 export interface ExportMetadata {
   exportId: string;
@@ -273,6 +274,10 @@ export async function generateParticipantExport(
       'Team Leader',
       'Team Leader Reg No',
       'Member Count',
+      'Member 1 Name',
+      'Member 2 Name',
+      'Member 3 Name',
+      'Member 4 Name',
       'Team Status',
       'Gate Entry Status',
       'Round 1 Status',
@@ -296,6 +301,15 @@ export async function generateParticipantExport(
       const r2Status = r2Res ? 'Scanned' : 'Not Scanned';
       const r2Outcome = r2Res?.result || 'PENDING';
 
+      // Resolve member names: leader first, then remaining members in array order
+      const memberUids = t.memberUids || [];
+      const leaderUid = t.leaderUid;
+      const orderedUids = [
+        leaderUid,
+        ...memberUids.filter((uid) => uid !== leaderUid),
+      ];
+      const memberNames = orderedUids.map((uid) => participantMap.get(uid)?.fullName || '');
+
       sheet2Rows.push([
         teamSNo++,
         t.teamId,
@@ -304,6 +318,10 @@ export async function generateParticipantExport(
         leader?.fullName || t.leaderName || 'N/A',
         leader?.registrationNumber || 'N/A',
         t.memberCount || (t.memberUids || []).length,
+        memberNames[0] || '',
+        memberNames[1] || '',
+        memberNames[2] || '',
+        memberNames[3] || '',
         t.status || 'ACTIVE',
         isGate ? 'Checked In' : 'Not Checked In',
         r1Status,
@@ -359,6 +377,7 @@ export async function generateParticipantExport(
 
     // ─────────────────────────────────────────────────────────────────────────
     // SHEET 4: EVENT SUMMARY
+    // Uses MOCK_EVENTS — the canonical TARAS 2K26 event list used across the website.
     // ─────────────────────────────────────────────────────────────────────────
     const sheet4Headers = [
       'Event Name',
@@ -374,8 +393,8 @@ export async function generateParticipantExport(
 
     const sheet4Rows: (string | number)[][] = [sheet4Headers];
 
-    eventsList.forEach((e) => {
-      const eRegs = registrationsList.filter((r) => r.eventId === e.id || r.eventName === e.title);
+    MOCK_EVENTS.forEach((e) => {
+      const eRegs = registrationsList.filter((r) => r.eventId === e.id || r.eventName === e.name);
       const eCheckins = checkinsList.filter((c) => c.eventId === e.id);
       const eR1 = r1ResultsList.filter((r) => r.eventId === e.id);
       const eR1Selected = eR1.filter((r) => r.result === 'SELECTED');
@@ -383,7 +402,7 @@ export async function generateParticipantExport(
       const eFinals = eR2.filter((r) => r.result === 'WINNER' || r.result === 'RUNNER_UP' || r.result === 'SPECIAL_MENTION');
 
       sheet4Rows.push([
-        e.title || e.name || e.id,
+        e.name,
         eRegs.length,
         eRegs.filter((r) => r.status === 'CONFIRMED').length,
         eRegs.filter((r) => r.paymentStatus === 'VERIFIED').length,

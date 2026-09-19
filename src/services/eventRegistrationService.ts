@@ -307,8 +307,8 @@ export async function createEventRegistration(
       }
     }
 
-    // Determine fee: Paper-X-Verse Internal = ₹0 (Free); Paid registrations = ₹200
-    const calculatedFee = (isInternal && isInternalPaperEvent) ? 0 : BASE_FEE_PER_PERSON;
+    // Determine fee: Paper-X-Verse Internal = ₹0 (Free); Paid team registrations = ₹200 × teamMemberCount
+    const calculatedFee = (isInternal && isInternalPaperEvent) ? 0 : teamMemberCount * BASE_FEE_PER_PERSON;
     const feePerPerson = BASE_FEE_PER_PERSON;
     const isFirstPayment = true;
 

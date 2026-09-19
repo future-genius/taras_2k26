@@ -127,8 +127,9 @@ export const RegistrationWizardModal: React.FC<RegistrationWizardModalProps> = (
       (eligibleTeam.members?.some((m) => m.isLeader && (m.uid === currentUid || m.uid === participantProfile?.uid)))
     : false;
 
-  // Fee calculation: Internal Paper Presentation = ₹0 (FREE); External / paid = ₹200
-  const calculatedFee = (isInternal && isInternalPaperEvent) ? 0 : 200;
+  // Fee calculation: Internal Paper Presentation = ₹0 (FREE); External / paid = ₹200 × member count
+  const teamMemberCount = eligibleTeam?.members?.length ?? 1;
+  const calculatedFee = (isInternal && isInternalPaperEvent) ? 0 : teamMemberCount * 200;
   const isZeroFee = (createdReg?.calculatedFee ?? calculatedFee) === 0;
 
   useEffect(() => {
@@ -472,8 +473,12 @@ export const RegistrationWizardModal: React.FC<RegistrationWizardModalProps> = (
                     </div>
                   ) : (
                     <div>
-                      <span className="text-xl font-extrabold text-[#b91c1c]">₹200</span>
-                      <span className="text-[10px] text-slate-400 block">Fixed Event Fee</span>
+                      <span className="text-xl font-extrabold text-[#b91c1c]">₹{calculatedFee}</span>
+                      <span className="text-[10px] text-slate-400 block">
+                        {isTeamEvent && teamMemberCount > 1
+                          ? `₹200 × ${teamMemberCount} members`
+                          : 'Fixed Event Fee'}
+                      </span>
                     </div>
                   )}
                 </div>
@@ -607,7 +612,10 @@ export const RegistrationWizardModal: React.FC<RegistrationWizardModalProps> = (
             <div className="p-4 rounded-2xl bg-[#0a0c10] border border-[#b91c1c]/50 flex items-center justify-between">
               <div>
                 <span className="text-[10px] text-slate-400 uppercase block">Registration Fee</span>
-                <span className="text-2xl font-black text-white">₹200</span>
+                <span className="text-2xl font-black text-white">₹{createdReg.calculatedFee ?? createdReg.feeAmount ?? 200}</span>
+                {createdReg.teamMemberCount && createdReg.teamMemberCount > 1 && (
+                  <span className="text-[10px] text-slate-400 block">₹200 × {createdReg.teamMemberCount} members</span>
+                )}
               </div>
               <div className="text-right">
                 <span className="text-[10px] text-slate-400 block">Registration ID</span>
@@ -794,7 +802,7 @@ export const RegistrationWizardModal: React.FC<RegistrationWizardModalProps> = (
               <div className="flex justify-between">
                 <span className="text-slate-400">Amount:</span>
                 <span className={`font-bold ${isZeroFee ? 'text-green-400' : 'text-white'}`}>
-                  {isZeroFee ? '₹0 (Free Internal Student)' : '₹200'}
+                  {isZeroFee ? '₹0 (Free Internal Student)' : `₹${createdReg?.calculatedFee ?? createdReg?.feeAmount ?? 200}`}
                 </span>
               </div>
               {!isZeroFee && utrInput && (
